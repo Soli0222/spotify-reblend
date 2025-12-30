@@ -11,9 +11,10 @@ if (!connectionString || connectionString.includes(':@')) {
   const password = process.env.POSTGRES_PASSWORD;
   const db = process.env.POSTGRES_DB;
   const port = process.env.POSTGRES_PORT || '5432';
+  const host = process.env.POSTGRES_HOST || 'localhost';
 
   if (user && password && db) {
-    connectionString = `postgresql://${user}:${password}@db:${port}/${db}`;
+    connectionString = `postgresql://${user}:${password}@${host}:${port}/${db}`;
   }
 }
 
