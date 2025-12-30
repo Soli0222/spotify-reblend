@@ -1,0 +1,17 @@
+{
+    "name": "spotify-reblend",
+    "version": "1.0.0",
+    "private": true,
+    "description": "Spotify ReBlend - Create shared playlists with friends",
+    "scripts": {
+        "dev": "pnpm --filter spotify-reblend-backend dev",
+        "dev:backend": "pnpm --filter spotify-reblend-backend dev",
+        "dev:frontend": "pnpm --filter spotify-reblend-frontend dev",
+        "build": "pnpm build:frontend && pnpm build:backend",
+        "build:backend": "pnpm --filter spotify-reblend-backend build",
+        "build:frontend": "pnpm --filter spotify-reblend-frontend build",
+        "start": "pnpm --filter spotify-reblend-backend start",
+        "test": "pnpm -r test"
+    },
+    "packageManager": "pnpm@10.26.2"
+}
