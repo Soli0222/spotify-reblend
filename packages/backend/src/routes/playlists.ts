@@ -2,6 +2,8 @@ import { Router, Request, Response } from 'express';
 import { pool } from '../config/database';
 import { spotifyService, SpotifyTrack } from '../services/spotify';
 import { blendTracks } from '../services/blend';
+import { logger } from '../utils/logger';
+import { metrics } from '../utils/metrics';
 
 const router: Router = Router();
 
@@ -44,8 +46,13 @@ router.post('/', async (req: Request, res: Response) => {
             status: playlist.status,
             createdAt: playlist.created_at,
         });
+
+        // Metrics & Logging
+        metrics.playlistCreated.inc();
+        logger.info({ playlistId: playlist.id, userId }, 'Playlist created');
+
     } catch (error) {
-        console.error('Create playlist error:', error);
+        logger.error({ err: error, userId: req.headers['x-user-id'] }, 'Create playlist error');
         res.status(500).json({ error: 'Failed to create playlist' });
     }
 });
@@ -83,7 +90,7 @@ router.get('/', async (req: Request, res: Response) => {
             createdAt: p.created_at,
         })));
     } catch (error) {
-        console.error('Get playlists error:', error);
+        logger.error({ err: error, userId: req.headers['x-user-id'] }, 'Get playlists error');
         res.status(500).json({ error: 'Failed to get playlists' });
     }
 });
@@ -164,7 +171,7 @@ router.get('/:id', async (req: Request, res: Response) => {
             })),
         });
     } catch (error) {
-        console.error('Get playlist error:', error);
+        logger.error({ err: error, playlistId: req.params.id }, 'Get playlist error');
         res.status(500).json({ error: 'Failed to get playlist' });
     }
 });
@@ -235,7 +242,7 @@ router.get('/:id/tracks', async (req: Request, res: Response) => {
             })),
         });
     } catch (error) {
-        console.error('Get playlist tracks error:', error);
+        logger.error({ err: error, playlistId: req.params.id }, 'Get playlist tracks error');
         res.status(500).json({ error: 'Failed to get playlist tracks' });
     }
 });
@@ -258,7 +265,7 @@ async function getValidAccessToken(member: {
                 [accessToken, new Date(Date.now() + tokens.expires_in * 1000), member.id]
             );
         } catch (error) {
-            console.error(`Failed to refresh token for user ${member.id}:`, error);
+            logger.error({ err: error, memberId: member.id }, 'Failed to refresh token');
             return null;
         }
     }
@@ -322,7 +329,7 @@ router.post('/:id/generate', async (req: Request, res: Response) => {
 
                 userTracks.set(member.spotify_id, tracks);
             } catch (error) {
-                console.error(`Failed to get top tracks for user ${member.id}:`, error);
+                logger.error({ err: error, memberId: member.id }, 'Failed to get top tracks');
             }
         }
 
@@ -395,7 +402,7 @@ router.post('/:id/generate', async (req: Request, res: Response) => {
                             await spotifyService.followPlaylist(accessToken, spotifyPlaylistId);
                         }
                     } catch (error) {
-                        console.error(`Failed to follow playlist for user ${member.id}:`, error);
+                        logger.error({ err: error, memberId: member.id }, 'Failed to follow playlist');
                     }
                 }
             }
@@ -417,8 +424,17 @@ router.post('/:id/generate', async (req: Request, res: Response) => {
             spotifyUrl,
             trackCount: tracks.length,
         });
+
+        // Metrics & Logging
+        metrics.blendExecuted.inc({ user_count: membersResult.rows.length });
+        logger.info({
+            playlistId: id,
+            trackCount: tracks.length,
+            memberCount: membersResult.rows.length
+        }, 'Playlist generated');
+
     } catch (error) {
-        console.error('Generate playlist error:', error);
+        logger.error({ err: error, playlistId: req.params.id }, 'Generate playlist error');
         res.status(500).json({ error: 'Failed to generate playlist' });
     }
 });
@@ -468,7 +484,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
                 await spotifyService.unfollowPlaylist(accessToken, playlist.spotify_playlist_id);
             } catch (error) {
-                console.error('Failed to unfollow Spotify playlist:', error);
+                logger.warn({ err: error, playlistId: id }, 'Failed to unfollow Spotify playlist');
                 // Continue with DB deletion even if Spotify fails
             }
         }
@@ -480,7 +496,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
 
         res.json({ message: 'Playlist deleted successfully' });
     } catch (error) {
-        console.error('Delete playlist error:', error);
+        logger.error({ err: error, playlistId: req.params.id }, 'Delete playlist error');
         res.status(500).json({ error: 'Failed to delete playlist' });
     }
 });

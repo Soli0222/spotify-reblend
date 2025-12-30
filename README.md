@@ -67,7 +67,7 @@ docker-compose up -d
 
 ### 4. ブラウザでアクセス
 
-http://localhost:3000 にアクセスしてください。
+http://127.0.0.1:3000 にアクセスしてください。
 
 ## 使い方
 
@@ -125,6 +125,43 @@ docker-compose down
 # データベースも含めて完全にリセット
 docker-compose down -v
 ```
+
+## 監視と運用
+
+### メトリクス (Prometheus)
+
+アプリケーションは `9464` ポートで Prometheus 形式のメトリクスを公開しています。
+
+エンドポイント: `http://localhost:9464/metrics`
+
+#### 主なメトリクス
+- **Node.js**: `process_cpu_user_seconds_total`, `nodejs_heap_size_total_bytes` など
+- **HTTP**: 
+  - `reblend_http_requests_total`: リクエスト数 (method, route, status でラベル付け)
+  - `http_request_duration_seconds`: レスポンスタイムのヒストグラム
+- **アプリケーション**:
+  - `reblend_playlist_created_total`: 作成されたプレイリスト総数
+  - `reblend_blend_executed_total`: ブレンド実行回数
+  - `reblend_active_users`: 現在の登録ユーザー数
+
+#### Prometheus設定例 (`prometheus.yml`)
+
+```yaml
+scrape_configs:
+  - job_name: 'spotify-reblend'
+    static_configs:
+      - targets: ['host.docker.internal:9464']
+```
+
+### Grafanaダッシュボード
+
+`monitoring/grafana-dashboard.json` に Grafana 用のダッシュボード定義ファイルが含まれています。
+Grafana の **Import Dashboard** 機能を使ってこのファイルをアップロードすることで、以下のメトリクスを可視化できます：
+
+- アクティブユーザー数
+- プレイリスト作成・ブレンド実行数
+- HTTPリクエストレート・レイテンシ (ルート別)
+- CPU・メモリ使用率
 
 ## ライセンス
 
