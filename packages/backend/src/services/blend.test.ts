@@ -128,4 +128,32 @@ describe('blendTracks', () => {
         const result = blendTracks(userTracks, 20);
         expect(result.tracks.length).toBeLessThanOrEqual(20);
     });
+    it('should interleave tracks from multiple users', () => {
+        const userTracks = new Map<string, SpotifyTrack[]>();
+
+        // Create identifiable tracks for each user
+        userTracks.set('user1', Array.from({ length: 5 }, (_, i) =>
+            createMockTrack(`u1-${i}`, `User1 Track ${i}`)
+        ));
+        userTracks.set('user2', Array.from({ length: 5 }, (_, i) =>
+            createMockTrack(`u2-${i}`, `User2 Track ${i}`)
+        ));
+        userTracks.set('user3', Array.from({ length: 5 }, (_, i) =>
+            createMockTrack(`u3-${i}`, `User3 Track ${i}`)
+        ));
+
+        // Blend 15 tracks (5 from each of 3 users)
+        const result = blendTracks(userTracks, 15);
+
+        // Check the first round (first 3 tracks)
+        // Since we shuffle the user order each round, the first 3 tracks
+        // should contain exactly one track from each user.
+        const firstRoundIds = result.tracks.slice(0, 3).map(t => t.id.split('-')[0]);
+        const uniqueUsers = new Set(firstRoundIds);
+
+        expect(uniqueUsers.size).toBe(3);
+        expect(uniqueUsers.has('u1')).toBe(true);
+        expect(uniqueUsers.has('u2')).toBe(true);
+        expect(uniqueUsers.has('u3')).toBe(true);
+    });
 });

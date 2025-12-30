@@ -51,31 +51,58 @@ export function blendTracks(
     const tracksPerUser = Math.floor(totalTracks / userCount);
     const remainder = totalTracks % userCount;
 
-    const selectedTracks: SpotifyTrack[] = [];
     const contributionsByUser = new Map<string, number>();
+    const userTrackLists: SpotifyTrack[][] = [];
+    const seenIds = new Set<string>();
+
     let extraTracksAssigned = 0;
 
-    // Collect tracks from each user
+    // 1. Collect unique tracks per user
     for (const [userId, tracks] of userTracks) {
-        // Some users get one extra track to use up the remainder
         const userLimit = tracksPerUser + (extraTracksAssigned < remainder ? 1 : 0);
         if (extraTracksAssigned < remainder) {
             extraTracksAssigned++;
         }
 
-        const userContribution = tracks.slice(0, userLimit);
-        selectedTracks.push(...userContribution);
-        contributionsByUser.set(userId, userContribution.length);
+        const userManifest: SpotifyTrack[] = [];
+        for (const track of tracks) {
+            if (userManifest.length >= userLimit) break;
+
+            if (!seenIds.has(track.id)) {
+                seenIds.add(track.id);
+                userManifest.push(track);
+            }
+        }
+
+        // Shuffle individual user's contribution
+        userTrackLists.push(shuffle(userManifest));
+        contributionsByUser.set(userId, userManifest.length);
     }
 
-    // Remove any duplicates (same track liked by multiple users)
-    const uniqueTracks = removeDuplicates(selectedTracks);
+    // 2. Interleave tracks (Chunked Round Robin)
+    const interleavedTracks: SpotifyTrack[] = [];
+    let activeLists = [...userTrackLists];
 
-    // Shuffle the final list
-    const shuffledTracks = shuffle(uniqueTracks);
+    while (activeLists.length > 0) {
+        // Shuffle the order of users for this round to ensure fairness
+        activeLists = shuffle(activeLists);
 
-    // Trim to exactly totalTracks if we have more
-    const finalTracks = shuffledTracks.slice(0, totalTracks);
+        const nextRoundLists: SpotifyTrack[][] = [];
+        for (const list of activeLists) {
+            const track = list.shift();
+            if (track) {
+                interleavedTracks.push(track);
+            }
+
+            if (list.length > 0) {
+                nextRoundLists.push(list);
+            }
+        }
+        activeLists = nextRoundLists;
+    }
+
+    // 3. Final trim
+    const finalTracks = interleavedTracks.slice(0, totalTracks);
 
     return {
         tracks: finalTracks,
