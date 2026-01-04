@@ -78,6 +78,8 @@ export interface PlaylistTrack {
     albumImage: string | null;
 }
 
+export type SortMode = 'shuffle' | 'smart';
+
 export const playlistApi = {
     create: (name: string, description: string) =>
         api.post<Playlist>('/api/playlists', { name, description }),
@@ -89,13 +91,13 @@ export const playlistApi = {
     getTracks: (id: number) =>
         api.get<{ tracks: PlaylistTrack[] }>(`/api/playlists/${id}/tracks`),
 
-    generate: (id: number) =>
+    generate: (id: number, sortMode: SortMode = 'shuffle') =>
         api.post<{
             message: string;
             spotifyPlaylistId: string;
             spotifyUrl: string;
             trackCount: number;
-        }>(`/api/playlists/${id}/generate`),
+        }>(`/api/playlists/${id}/generate`, { sortMode }),
 
     delete: (id: number, deleteFromSpotify: boolean = false) =>
         api.delete<{ message: string }>(`/api/playlists/${id}?deleteFromSpotify=${deleteFromSpotify}`),

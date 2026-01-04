@@ -1,7 +1,7 @@
 import { Router, Request, Response } from 'express';
 import { pool } from '../config/database';
 import { spotifyService, SpotifyTrack } from '../services/spotify';
-import { blendTracks } from '../services/blend';
+import { blendTracks, SortMode } from '../services/blend';
 import { logger } from '../utils/logger';
 import { metrics } from '../utils/metrics';
 
@@ -278,6 +278,7 @@ router.post('/:id/generate', async (req: Request, res: Response) => {
     try {
         const userId = req.headers['x-user-id'];
         const { id } = req.params;
+        const { sortMode = 'shuffle' } = req.body as { sortMode?: SortMode };
 
         if (!userId) {
             return res.status(401).json({ error: 'Unauthorized' });
@@ -338,7 +339,7 @@ router.post('/:id/generate', async (req: Request, res: Response) => {
         }
 
         // Blend tracks
-        const { tracks } = blendTracks(userTracks, 100);
+        const { tracks } = await blendTracks(userTracks, { totalTracks: 100, sortMode });
 
         if (tracks.length === 0) {
             return res.status(400).json({ error: 'No tracks to add to playlist' });

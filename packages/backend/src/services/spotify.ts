@@ -21,6 +21,9 @@ export interface SpotifyTrack {
     name: string;
     artists: { name: string }[];
     album: { name: string; images: { url: string }[] };
+    external_ids?: {
+        isrc?: string;
+    };
 }
 
 export class SpotifyService {
