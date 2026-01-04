@@ -1,4 +1,8 @@
 import { SpotifyTrack } from './spotify';
+import { reccoBeatsService, smartSortTracks, AudioFeatures } from './reccobeats';
+import { logger } from '../utils/logger';
+
+export type SortMode = 'shuffle' | 'smart';
 
 /**
  * Fisher-Yates shuffle algorithm
@@ -31,17 +35,23 @@ export interface BlendResult {
     contributionsByUser: Map<string, number>;
 }
 
+export interface BlendOptions {
+    totalTracks?: number;
+    sortMode?: SortMode;
+}
+
 /**
  * Blend tracks from multiple users
  * 
  * @param userTracks - Map of user ID to their top tracks
- * @param totalTracks - Total number of tracks for the final playlist (default: 100)
- * @returns Blended and shuffled tracks
+ * @param options - Blend options (totalTracks, sortMode)
+ * @returns Blended and sorted tracks
  */
-export function blendTracks(
+export async function blendTracks(
     userTracks: Map<string, SpotifyTrack[]>,
-    totalTracks: number = 100
-): BlendResult {
+    options: BlendOptions = {}
+): Promise<BlendResult> {
+    const { totalTracks = 100, sortMode = 'shuffle' } = options;
     const userCount = userTracks.size;
     if (userCount === 0) {
         return { tracks: [], contributionsByUser: new Map() };
@@ -74,7 +84,7 @@ export function blendTracks(
             }
         }
 
-        // Shuffle individual user's contribution
+        // Shuffle individual user's contribution (for interleaving fairness)
         userTrackLists.push(shuffle(userManifest));
         contributionsByUser.set(userId, userManifest.length);
     }
@@ -102,7 +112,38 @@ export function blendTracks(
     }
 
     // 3. Final trim
-    const finalTracks = interleavedTracks.slice(0, totalTracks);
+    let finalTracks = interleavedTracks.slice(0, totalTracks);
+
+    // 4. Apply sort mode
+    if (sortMode === 'smart') {
+        logger.info({ trackCount: finalTracks.length }, 'Fetching audio features for smart sort');
+        
+        // Get audio features from ReccoBeats
+        const tracksWithIsrc = finalTracks
+            .filter(t => t.external_ids?.isrc)
+            .map(t => ({
+                spotifyId: t.id,
+                isrc: t.external_ids!.isrc!,
+            }));
+
+        if (tracksWithIsrc.length > 0) {
+            const featuresMap = await reccoBeatsService.getAudioFeaturesForTracks(tracksWithIsrc);
+            
+            if (featuresMap.size > 0) {
+                finalTracks = smartSortTracks(finalTracks, featuresMap);
+                logger.info({ 
+                    trackCount: finalTracks.length, 
+                    tracksWithFeatures: featuresMap.size 
+                }, 'Applied smart sort');
+            } else {
+                logger.warn('No audio features found, falling back to shuffle');
+                finalTracks = shuffle(finalTracks);
+            }
+        } else {
+            logger.warn('No tracks with ISRC found, falling back to shuffle');
+            finalTracks = shuffle(finalTracks);
+        }
+    }
 
     return {
         tracks: finalTracks,

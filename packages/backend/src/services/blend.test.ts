@@ -14,13 +14,13 @@ function createMockTrack(id: string, name: string): SpotifyTrack {
 }
 
 describe('blendTracks', () => {
-    it('should return empty result for empty input', () => {
-        const result = blendTracks(new Map(), 100);
+    it('should return empty result for empty input', async () => {
+        const result = await blendTracks(new Map());
         expect(result.tracks).toHaveLength(0);
         expect(result.contributionsByUser.size).toBe(0);
     });
 
-    it('should blend tracks from single user', () => {
+    it('should blend tracks from single user', async () => {
         const userTracks = new Map<string, SpotifyTrack[]>();
         userTracks.set('user1', [
             createMockTrack('1', 'Track 1'),
@@ -28,12 +28,12 @@ describe('blendTracks', () => {
             createMockTrack('3', 'Track 3'),
         ]);
 
-        const result = blendTracks(userTracks, 10);
+        const result = await blendTracks(userTracks, { totalTracks: 10 });
         expect(result.tracks.length).toBeLessThanOrEqual(3);
         expect(result.contributionsByUser.get('user1')).toBe(3);
     });
 
-    it('should distribute tracks evenly between users', () => {
+    it('should distribute tracks evenly between users', async () => {
         const userTracks = new Map<string, SpotifyTrack[]>();
 
         // User 1 has 10 tracks
@@ -46,7 +46,7 @@ describe('blendTracks', () => {
             createMockTrack(`u2-${i}`, `User2 Track ${i}`)
         ));
 
-        const result = blendTracks(userTracks, 10);
+        const result = await blendTracks(userTracks, { totalTracks: 10 });
 
         // Each user should contribute ~5 tracks
         const user1Contribution = result.contributionsByUser.get('user1') || 0;
@@ -56,7 +56,7 @@ describe('blendTracks', () => {
         expect(user2Contribution).toBe(5);
     });
 
-    it('should remove duplicate tracks', () => {
+    it('should remove duplicate tracks', async () => {
         const userTracks = new Map<string, SpotifyTrack[]>();
 
         // Both users have the same track
@@ -72,14 +72,14 @@ describe('blendTracks', () => {
             createMockTrack('u2-1', 'User2 Track 1'),
         ]);
 
-        const result = blendTracks(userTracks, 10);
+        const result = await blendTracks(userTracks, { totalTracks: 10 });
 
         // Should have 3 unique tracks, not 4
         const uniqueIds = new Set(result.tracks.map(t => t.id));
         expect(uniqueIds.size).toBe(result.tracks.length);
     });
 
-    it('should handle three users', () => {
+    it('should handle three users', async () => {
         const userTracks = new Map<string, SpotifyTrack[]>();
 
         userTracks.set('user1', Array.from({ length: 10 }, (_, i) =>
@@ -92,7 +92,7 @@ describe('blendTracks', () => {
             createMockTrack(`u3-${i}`, `User3 Track ${i}`)
         ));
 
-        const result = blendTracks(userTracks, 12);
+        const result = await blendTracks(userTracks, { totalTracks: 12 });
 
         // 12 / 3 = 4 tracks per user
         expect(result.contributionsByUser.get('user1')).toBe(4);
@@ -100,7 +100,7 @@ describe('blendTracks', () => {
         expect(result.contributionsByUser.get('user3')).toBe(4);
     });
 
-    it('should handle remainder distribution', () => {
+    it('should handle remainder distribution', async () => {
         const userTracks = new Map<string, SpotifyTrack[]>();
 
         userTracks.set('user1', Array.from({ length: 10 }, (_, i) =>
@@ -111,24 +111,24 @@ describe('blendTracks', () => {
         ));
 
         // 11 tracks / 2 users = 5 each + 1 remainder
-        const result = blendTracks(userTracks, 11);
+        const result = await blendTracks(userTracks, { totalTracks: 11 });
 
         const total = (result.contributionsByUser.get('user1') || 0) +
             (result.contributionsByUser.get('user2') || 0);
         expect(total).toBe(11);
     });
 
-    it('should limit to requested total tracks', () => {
+    it('should limit to requested total tracks', async () => {
         const userTracks = new Map<string, SpotifyTrack[]>();
 
         userTracks.set('user1', Array.from({ length: 100 }, (_, i) =>
             createMockTrack(`u1-${i}`, `User1 Track ${i}`)
         ));
 
-        const result = blendTracks(userTracks, 20);
+        const result = await blendTracks(userTracks, { totalTracks: 20 });
         expect(result.tracks.length).toBeLessThanOrEqual(20);
     });
-    it('should interleave tracks from multiple users', () => {
+    it('should interleave tracks from multiple users', async () => {
         const userTracks = new Map<string, SpotifyTrack[]>();
 
         // Create identifiable tracks for each user
@@ -143,7 +143,7 @@ describe('blendTracks', () => {
         ));
 
         // Blend 15 tracks (5 from each of 3 users)
-        const result = blendTracks(userTracks, 15);
+        const result = await blendTracks(userTracks, { totalTracks: 15 });
 
         // Check the first round (first 3 tracks)
         // Since we shuffle the user order each round, the first 3 tracks
@@ -155,5 +155,17 @@ describe('blendTracks', () => {
         expect(uniqueUsers.has('u1')).toBe(true);
         expect(uniqueUsers.has('u2')).toBe(true);
         expect(uniqueUsers.has('u3')).toBe(true);
+    });
+
+    it('should use shuffle mode by default', async () => {
+        const userTracks = new Map<string, SpotifyTrack[]>();
+        userTracks.set('user1', [
+            createMockTrack('1', 'Track 1'),
+            createMockTrack('2', 'Track 2'),
+        ]);
+
+        // Default should work without specifying sortMode
+        const result = await blendTracks(userTracks);
+        expect(result.tracks.length).toBe(2);
     });
 });

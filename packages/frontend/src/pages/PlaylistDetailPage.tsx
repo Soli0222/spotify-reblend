@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { playlistApi, authApi, invitationApi, PlaylistDetail, PlaylistTrack } from '../services/api';
+import { playlistApi, authApi, invitationApi, PlaylistDetail, PlaylistTrack, SortMode } from '../services/api';
 import './PlaylistDetailPage.css';
 
 interface SearchUser {
@@ -36,6 +36,7 @@ export default function PlaylistDetailPage() {
         trackCount: number;
         message: string;
     } | null>(null);
+    const [sortMode, setSortMode] = useState<SortMode>('shuffle');
 
     // Delete state
     const [isDeleting, setIsDeleting] = useState(false);
@@ -126,7 +127,7 @@ export default function PlaylistDetailPage() {
         setGenerateResult(null);
 
         try {
-            const response = await playlistApi.generate(parseInt(id));
+            const response = await playlistApi.generate(parseInt(id), sortMode);
             setGenerateResult({
                 spotifyUrl: response.data.spotifyUrl,
                 trackCount: response.data.trackCount,
@@ -375,6 +376,40 @@ export default function PlaylistDetailPage() {
                                     <br />
                                     <small>※ インストゥルメンタル曲は自動的に除外されます</small>
                                 </p>
+
+                                <div className="sort-mode-selector">
+                                    <label className="sort-mode-label">曲の並び順:</label>
+                                    <div className="sort-mode-options">
+                                        <label className={`sort-mode-option ${sortMode === 'shuffle' ? 'selected' : ''}`}>
+                                            <input
+                                                type="radio"
+                                                name="sortMode"
+                                                value="shuffle"
+                                                checked={sortMode === 'shuffle'}
+                                                onChange={() => setSortMode('shuffle')}
+                                            />
+                                            <span className="sort-mode-icon">🎲</span>
+                                            <span className="sort-mode-text">
+                                                <span className="sort-mode-title">シャッフル</span>
+                                                <span className="sort-mode-desc">ランダムに並べる</span>
+                                            </span>
+                                        </label>
+                                        <label className={`sort-mode-option ${sortMode === 'smart' ? 'selected' : ''}`}>
+                                            <input
+                                                type="radio"
+                                                name="sortMode"
+                                                value="smart"
+                                                checked={sortMode === 'smart'}
+                                                onChange={() => setSortMode('smart')}
+                                            />
+                                            <span className="sort-mode-icon">✨</span>
+                                            <span className="sort-mode-text">
+                                                <span className="sort-mode-title">スマートソート</span>
+                                                <span className="sort-mode-desc">テンポ・エナジーでスムーズに</span>
+                                            </span>
+                                        </label>
+                                    </div>
+                                </div>
 
                                 {error && (
                                     <div className="form-error">{error}</div>

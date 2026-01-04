@@ -3,6 +3,7 @@ services:
     build:
       context: .
       dockerfile: Dockerfile
+    # image: ghcr.io/soli0222/spotify-reblend:1.1.0
     ports:
       - "3000:3000"
       - "9464:9464"
