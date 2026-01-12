@@ -60,7 +60,7 @@ router.post('/playlists/:playlistId/invitations', async (req: Request, res: Resp
 
         res.status(201).json({
             id: result.rows[0].id,
-            playlistId: parseInt(playlistId),
+            playlistId: parseInt(playlistId as string),
             inviteeId,
             status: result.rows[0].status,
             createdAt: result.rows[0].created_at,
