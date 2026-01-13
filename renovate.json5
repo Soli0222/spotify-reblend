@@ -5,6 +5,7 @@
     ":dependencyDashboard"
   ],
   timezone: 'Asia/Tokyo',
+  rangeStrategy: 'bump',
   prConcurrentLimit: 20,
   prHourlyLimit: 10,
   "reviewers": [
