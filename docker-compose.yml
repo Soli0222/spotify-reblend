@@ -18,7 +18,7 @@ services:
     restart: unless-stopped
 
   db:
-    image: postgres:18.1-alpine3.23
+    image: postgres:18.2-alpine3.23
     ports:
       - "5432:5432"
     env_file:
