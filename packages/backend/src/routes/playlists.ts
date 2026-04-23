@@ -301,7 +301,8 @@ router.post('/:id/generate', async (req: Request, res: Response) => {
             `SELECT u.id, u.spotify_id, u.access_token, u.refresh_token, u.token_expires_at
        FROM playlist_members pm
        JOIN users u ON pm.user_id = u.id
-       WHERE pm.playlist_id = $1`,
+       WHERE pm.playlist_id = $1
+       ORDER BY pm.created_at ASC, pm.id ASC`,
             [id]
         );
 

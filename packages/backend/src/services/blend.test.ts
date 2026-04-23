@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi, afterEach } from 'vitest';
 import { blendTracks } from './blend';
 import { SpotifyTrack } from './spotify';
 
@@ -14,6 +14,10 @@ function createMockTrack(id: string, name: string): SpotifyTrack {
 }
 
 describe('blendTracks', () => {
+    afterEach(() => {
+        vi.restoreAllMocks();
+    });
+
     it('should return empty result for empty input', async () => {
         const result = await blendTracks(new Map());
         expect(result.tracks).toHaveLength(0);
@@ -128,10 +132,9 @@ describe('blendTracks', () => {
         const result = await blendTracks(userTracks, { totalTracks: 20 });
         expect(result.tracks.length).toBeLessThanOrEqual(20);
     });
-    it('should interleave tracks from multiple users', async () => {
+    it('should preserve member order across round-robin rounds', async () => {
         const userTracks = new Map<string, SpotifyTrack[]>();
 
-        // Create identifiable tracks for each user
         userTracks.set('user1', Array.from({ length: 5 }, (_, i) =>
             createMockTrack(`u1-${i}`, `User1 Track ${i}`)
         ));
@@ -142,19 +145,17 @@ describe('blendTracks', () => {
             createMockTrack(`u3-${i}`, `User3 Track ${i}`)
         ));
 
-        // Blend 15 tracks (5 from each of 3 users)
+        vi.spyOn(Math, 'random').mockReturnValue(0);
+
         const result = await blendTracks(userTracks, { totalTracks: 15 });
 
-        // Check the first round (first 3 tracks)
-        // Since we shuffle the user order each round, the first 3 tracks
-        // should contain exactly one track from each user.
-        const firstRoundIds = result.tracks.slice(0, 3).map(t => t.id.split('-')[0]);
-        const uniqueUsers = new Set(firstRoundIds);
-
-        expect(uniqueUsers.size).toBe(3);
-        expect(uniqueUsers.has('u1')).toBe(true);
-        expect(uniqueUsers.has('u2')).toBe(true);
-        expect(uniqueUsers.has('u3')).toBe(true);
+        expect(result.tracks.map(t => t.id)).toEqual([
+            'u1-1', 'u2-1', 'u3-1',
+            'u1-2', 'u2-2', 'u3-2',
+            'u1-3', 'u2-3', 'u3-3',
+            'u1-4', 'u2-4', 'u3-4',
+            'u1-0', 'u2-0', 'u3-0',
+        ]);
     });
 
     it('should use shuffle mode by default', async () => {
