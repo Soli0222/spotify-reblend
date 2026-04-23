@@ -94,9 +94,6 @@ export async function blendTracks(
     let activeLists = [...userTrackLists];
 
     while (activeLists.length > 0) {
-        // Shuffle the order of users for this round to ensure fairness
-        activeLists = shuffle(activeLists);
-
         const nextRoundLists: SpotifyTrack[][] = [];
         for (const list of activeLists) {
             const track = list.shift();
