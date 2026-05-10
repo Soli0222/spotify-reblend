@@ -4,29 +4,38 @@ import { spotifyService, SpotifyTrack } from '../services/spotify';
 import { blendTracks, SortMode } from '../services/blend';
 import { logger } from '../utils/logger';
 import { metrics } from '../utils/metrics';
+import { requireAuth } from '../utils/auth';
+import { decryptSecret, encryptSecret } from '../utils/crypto';
+import { rateLimit } from '../utils/http';
 
 const router: Router = Router();
+
+router.use(requireAuth);
 
 // Create a new playlist
 router.post('/', async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'];
+        const userId = req.authUser!.id;
         const { name, description } = req.body;
 
-        if (!userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
-
-        if (!name) {
+        if (!name || typeof name !== 'string') {
             return res.status(400).json({ error: 'Playlist name is required' });
         }
+        const trimmedName = name.trim();
+        if (trimmedName.length === 0 || trimmedName.length > 255) {
+            return res.status(400).json({ error: 'Playlist name must be between 1 and 255 characters' });
+        }
+        if (description !== undefined && typeof description !== 'string') {
+            return res.status(400).json({ error: 'Playlist description must be a string' });
+        }
+        const trimmedDescription = (description || '').trim().slice(0, 1000);
 
         // Create playlist
         const result = await pool.query(
             `INSERT INTO playlists (name, description, owner_id)
        VALUES ($1, $2, $3)
        RETURNING id, name, description, owner_id, status, created_at`,
-            [name, description || '', userId]
+            [trimmedName, trimmedDescription, userId]
         );
 
         const playlist = result.rows[0];
@@ -52,7 +61,7 @@ router.post('/', async (req: Request, res: Response) => {
         logger.info({ playlistId: playlist.id, userId }, 'Playlist created');
 
     } catch (error) {
-        logger.error({ err: error, userId: req.headers['x-user-id'] }, 'Create playlist error');
+        logger.error({ err: error, userId: req.authUser?.id }, 'Create playlist error');
         res.status(500).json({ error: 'Failed to create playlist' });
     }
 });
@@ -60,11 +69,7 @@ router.post('/', async (req: Request, res: Response) => {
 // Get user's playlists (owned and member of)
 router.get('/', async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'];
-
-        if (!userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
+        const userId = req.authUser!.id;
 
         const result = await pool.query(
             `SELECT DISTINCT p.id, p.name, p.description, p.owner_id, p.spotify_playlist_id, 
@@ -90,7 +95,7 @@ router.get('/', async (req: Request, res: Response) => {
             createdAt: p.created_at,
         })));
     } catch (error) {
-        logger.error({ err: error, userId: req.headers['x-user-id'] }, 'Get playlists error');
+        logger.error({ err: error, userId: req.authUser?.id }, 'Get playlists error');
         res.status(500).json({ error: 'Failed to get playlists' });
     }
 });
@@ -98,12 +103,8 @@ router.get('/', async (req: Request, res: Response) => {
 // Get playlist details
 router.get('/:id', async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'];
+        const userId = req.authUser!.id;
         const { id } = req.params;
-
-        if (!userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
 
         // Check if user is a member
         const memberCheck = await pool.query(
@@ -179,12 +180,8 @@ router.get('/:id', async (req: Request, res: Response) => {
 // Get playlist tracks from Spotify
 router.get('/:id/tracks', async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'];
+        const userId = req.authUser!.id;
         const { id } = req.params;
-
-        if (!userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
 
         // Check if user is a member
         const memberCheck = await pool.query(
@@ -218,16 +215,27 @@ router.get('/:id/tracks', async (req: Request, res: Response) => {
             [userId]
         );
 
-        let accessToken = userResult.rows[0].access_token;
+        if (userResult.rows.length === 0) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+
+        let accessToken = decryptSecret(userResult.rows[0].access_token);
 
         // Refresh if needed
         if (new Date(userResult.rows[0].token_expires_at) <= new Date()) {
-            const tokens = await spotifyService.refreshToken(userResult.rows[0].refresh_token);
+            const refreshToken = decryptSecret(userResult.rows[0].refresh_token);
+            if (!refreshToken) {
+                return res.status(400).json({ error: 'Refresh token not available' });
+            }
+            const tokens = await spotifyService.refreshToken(refreshToken);
             accessToken = tokens.access_token;
             await pool.query(
-                'UPDATE users SET access_token = $1, token_expires_at = $2 WHERE id = $3',
-                [accessToken, new Date(Date.now() + tokens.expires_in * 1000), userId]
+                'UPDATE users SET access_token = $1, refresh_token = COALESCE($2, refresh_token), token_expires_at = $3 WHERE id = $4',
+                [encryptSecret(accessToken), encryptSecret(tokens.refresh_token), new Date(Date.now() + tokens.expires_in * 1000), userId]
             );
+        }
+        if (!accessToken) {
+            return res.status(400).json({ error: 'Access token not available' });
         }
 
         const tracks = await spotifyService.getPlaylistTracks(accessToken, spotifyPlaylistId);
@@ -250,19 +258,22 @@ router.get('/:id/tracks', async (req: Request, res: Response) => {
 // Helper function to get valid access token for a member
 async function getValidAccessToken(member: {
     id: number;
-    access_token: string;
-    refresh_token: string;
+    access_token: string | null;
+    refresh_token: string | null;
     token_expires_at: Date;
 }): Promise<string | null> {
-    let accessToken = member.access_token;
+    let accessToken = decryptSecret(member.access_token);
 
     if (new Date(member.token_expires_at) <= new Date()) {
         try {
-            const tokens = await spotifyService.refreshToken(member.refresh_token);
+            const refreshToken = decryptSecret(member.refresh_token);
+            if (!refreshToken) return null;
+
+            const tokens = await spotifyService.refreshToken(refreshToken);
             accessToken = tokens.access_token;
             await pool.query(
-                `UPDATE users SET access_token = $1, token_expires_at = $2 WHERE id = $3`,
-                [accessToken, new Date(Date.now() + tokens.expires_in * 1000), member.id]
+                `UPDATE users SET access_token = $1, refresh_token = COALESCE($2, refresh_token), token_expires_at = $3 WHERE id = $4`,
+                [encryptSecret(accessToken), encryptSecret(tokens.refresh_token), new Date(Date.now() + tokens.expires_in * 1000), member.id]
             );
         } catch (error) {
             logger.error({ err: error, memberId: member.id }, 'Failed to refresh token');
@@ -274,14 +285,14 @@ async function getValidAccessToken(member: {
 }
 
 // Generate or regenerate the blended playlist on Spotify
-router.post('/:id/generate', async (req: Request, res: Response) => {
+router.post('/:id/generate', rateLimit({ windowMs: 60_000, max: 6, keyPrefix: 'playlist-generate' }), async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'];
+        const userId = req.authUser!.id;
         const { id } = req.params;
         const { sortMode = 'shuffle' } = req.body as { sortMode?: SortMode };
 
-        if (!userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
+        if (sortMode !== 'shuffle' && sortMode !== 'smart') {
+            return res.status(400).json({ error: 'Invalid sort mode' });
         }
 
         // Check if user is owner
@@ -319,7 +330,7 @@ router.post('/:id/generate', async (req: Request, res: Response) => {
             if (!accessToken) continue;
 
             // Save owner's access token for later
-            if (member.id === parseInt(userId as string)) {
+            if (member.id === userId) {
                 ownerAccessToken = accessToken;
             }
 
@@ -354,7 +365,7 @@ router.post('/:id/generate', async (req: Request, res: Response) => {
         const owner = ownerResult.rows[0];
 
         if (!ownerAccessToken) {
-            ownerAccessToken = owner.access_token;
+            ownerAccessToken = decryptSecret(owner.access_token);
         }
 
         // Ensure we have an access token
@@ -397,7 +408,7 @@ router.post('/:id/generate', async (req: Request, res: Response) => {
 
             // Follow playlist for all members
             for (const member of membersResult.rows) {
-                if (member.id !== parseInt(userId as string)) {
+                if (member.id !== userId) {
                     try {
                         const accessToken = await getValidAccessToken(member);
                         if (accessToken) {
@@ -444,13 +455,9 @@ router.post('/:id/generate', async (req: Request, res: Response) => {
 // Delete playlist
 router.delete('/:id', async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'];
+        const userId = req.authUser!.id;
         const { id } = req.params;
         const deleteFromSpotify = req.query.deleteFromSpotify === 'true';
-
-        if (!userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
 
         // Check if user is owner
         const playlistResult = await pool.query(
@@ -472,18 +479,25 @@ router.delete('/:id', async (req: Request, res: Response) => {
                     [userId]
                 );
 
-                let accessToken = userResult.rows[0].access_token;
+                let accessToken = decryptSecret(userResult.rows[0].access_token);
 
                 // Refresh if needed
                 if (new Date(userResult.rows[0].token_expires_at) <= new Date()) {
-                    const tokens = await spotifyService.refreshToken(userResult.rows[0].refresh_token);
+                    const refreshToken = decryptSecret(userResult.rows[0].refresh_token);
+                    if (!refreshToken) {
+                        throw new Error('Refresh token not available');
+                    }
+                    const tokens = await spotifyService.refreshToken(refreshToken);
                     accessToken = tokens.access_token;
                     await pool.query(
-                        'UPDATE users SET access_token = $1, token_expires_at = $2 WHERE id = $3',
-                        [accessToken, new Date(Date.now() + tokens.expires_in * 1000), userId]
+                        'UPDATE users SET access_token = $1, refresh_token = COALESCE($2, refresh_token), token_expires_at = $3 WHERE id = $4',
+                        [encryptSecret(accessToken), encryptSecret(tokens.refresh_token), new Date(Date.now() + tokens.expires_in * 1000), userId]
                     );
                 }
 
+                if (!accessToken) {
+                    throw new Error('Access token not available');
+                }
                 await spotifyService.unfollowPlaylist(accessToken, playlist.spotify_playlist_id);
             } catch (error) {
                 logger.warn({ err: error, playlistId: id }, 'Failed to unfollow Spotify playlist');

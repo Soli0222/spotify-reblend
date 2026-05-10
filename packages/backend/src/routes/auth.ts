@@ -1,22 +1,38 @@
 import { Router, Request, Response } from 'express';
 import { pool } from '../config/database';
 import { spotifyService } from '../services/spotify';
+import {
+    clearAuthCookie,
+    clearOAuthStateCookie,
+    createOAuthState,
+    requireAuth,
+    setAuthCookie,
+    setOAuthStateCookie,
+    verifyOAuthState
+} from '../utils/auth';
+import { decryptSecret, encryptSecret } from '../utils/crypto';
+import { rateLimit } from '../utils/http';
 
 const router: Router = Router();
 
 // Get Spotify auth URL
 router.get('/login', (_req: Request, res: Response) => {
-    const authUrl = spotifyService.getAuthUrl();
+    const state = createOAuthState();
+    setOAuthStateCookie(res, state);
+    const authUrl = spotifyService.getAuthUrl(state);
     res.json({ url: authUrl });
 });
 
 // Exchange code for tokens and create/update user
-router.post('/callback', async (req: Request, res: Response) => {
+router.post('/callback', rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'auth-callback' }), async (req: Request, res: Response) => {
     try {
-        const { code } = req.body;
+        const { code, state } = req.body;
 
         if (!code) {
             return res.status(400).json({ error: 'Authorization code is required' });
+        }
+        if (!verifyOAuthState(req, state)) {
+            return res.status(400).json({ error: 'Invalid OAuth state' });
         }
 
         // Exchange code for tokens
@@ -41,10 +57,19 @@ router.post('/callback', async (req: Request, res: Response) => {
          token_expires_at = EXCLUDED.token_expires_at,
          updated_at = CURRENT_TIMESTAMP
        RETURNING id, spotify_id, display_name, email`,
-            [spotifyUser.id, spotifyUser.display_name, spotifyUser.email, tokens.access_token, tokens.refresh_token, expiresAt]
+            [
+                spotifyUser.id,
+                spotifyUser.display_name,
+                spotifyUser.email,
+                encryptSecret(tokens.access_token),
+                encryptSecret(tokens.refresh_token),
+                expiresAt
+            ]
         );
 
         const user = result.rows[0];
+        setAuthCookie(res, { id: user.id, spotifyId: user.spotify_id });
+        clearOAuthStateCookie(res);
 
         res.json({
             user: {
@@ -53,7 +78,6 @@ router.post('/callback', async (req: Request, res: Response) => {
                 displayName: user.display_name,
                 email: user.email,
             },
-            accessToken: tokens.access_token,
             expiresAt: expiresAt.toISOString(),
         });
     } catch (error) {
@@ -63,13 +87,9 @@ router.post('/callback', async (req: Request, res: Response) => {
 });
 
 // Refresh access token
-router.post('/refresh', async (req: Request, res: Response) => {
+router.post('/refresh', requireAuth, rateLimit({ windowMs: 60_000, max: 20, keyPrefix: 'auth-refresh' }), async (req: Request, res: Response) => {
     try {
-        const { userId } = req.body;
-
-        if (!userId) {
-            return res.status(400).json({ error: 'User ID is required' });
-        }
+        const userId = req.authUser!.id;
 
         // Get user's refresh token
         const userResult = await pool.query(
@@ -81,7 +101,10 @@ router.post('/refresh', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        const refreshToken = userResult.rows[0].refresh_token;
+        const refreshToken = decryptSecret(userResult.rows[0].refresh_token);
+        if (!refreshToken) {
+            return res.status(400).json({ error: 'Refresh token not available' });
+        }
 
         // Get new tokens from Spotify
         const tokens = await spotifyService.refreshToken(refreshToken);
@@ -95,11 +118,10 @@ router.post('/refresh', async (req: Request, res: Response) => {
          token_expires_at = $3,
          updated_at = CURRENT_TIMESTAMP
        WHERE id = $4`,
-            [tokens.access_token, tokens.refresh_token, expiresAt, userId]
+            [encryptSecret(tokens.access_token), encryptSecret(tokens.refresh_token), expiresAt, userId]
         );
 
         res.json({
-            accessToken: tokens.access_token,
             expiresAt: expiresAt.toISOString(),
         });
     } catch (error) {
@@ -109,13 +131,9 @@ router.post('/refresh', async (req: Request, res: Response) => {
 });
 
 // Get current user info
-router.get('/me', async (req: Request, res: Response) => {
+router.get('/me', requireAuth, async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'];
-
-        if (!userId) {
-            return res.status(401).json({ error: 'User ID header is required' });
-        }
+        const userId = req.authUser!.id;
 
         const result = await pool.query(
             'SELECT id, spotify_id, display_name, email FROM users WHERE id = $1',
@@ -139,14 +157,23 @@ router.get('/me', async (req: Request, res: Response) => {
     }
 });
 
+router.post('/logout', (_req: Request, res: Response) => {
+    clearAuthCookie(res);
+    res.json({ message: 'Logged out' });
+});
+
 // Search users by display name or email
-router.get('/users/search', async (req: Request, res: Response) => {
+router.get('/users/search', requireAuth, rateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'user-search' }), async (req: Request, res: Response) => {
     try {
         const { q } = req.query;
-        const currentUserId = req.headers['x-user-id'];
+        const currentUserId = req.authUser!.id;
 
         if (!q || typeof q !== 'string') {
             return res.status(400).json({ error: 'Search query is required' });
+        }
+        const trimmedQuery = q.trim();
+        if (trimmedQuery.length < 2 || trimmedQuery.length > 80) {
+            return res.status(400).json({ error: 'Search query must be between 2 and 80 characters' });
         }
 
         const result = await pool.query(
@@ -155,7 +182,7 @@ router.get('/users/search', async (req: Request, res: Response) => {
        WHERE (display_name ILIKE $1 OR email ILIKE $1)
          AND id != $2
        LIMIT 10`,
-            [`%${q}%`, currentUserId]
+            [`%${trimmedQuery}%`, currentUserId]
         );
 
         res.json(result.rows.map(user => ({

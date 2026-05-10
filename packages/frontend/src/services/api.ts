@@ -5,36 +5,29 @@ const API_BASE_URL = '';
 
 const api = axios.create({
     baseURL: API_BASE_URL,
+    withCredentials: true,
     headers: {
         'Content-Type': 'application/json',
     },
-});
-
-// Add user ID header to authenticated requests
-api.interceptors.request.use((config) => {
-    const userId = localStorage.getItem('userId');
-    if (userId) {
-        config.headers['x-user-id'] = userId;
-    }
-    return config;
 });
 
 // Auth API
 export const authApi = {
     getLoginUrl: () => api.get<{ url: string }>('/api/auth/login'),
 
-    callback: (code: string) =>
+    callback: (code: string, state: string) =>
         api.post<{
             user: { id: number; spotifyId: string; displayName: string; email: string };
-            accessToken: string;
             expiresAt: string;
-        }>('/api/auth/callback', { code }),
+        }>('/api/auth/callback', { code, state }),
 
-    refresh: (userId: number) =>
-        api.post<{ accessToken: string; expiresAt: string }>('/api/auth/refresh', { userId }),
+    refresh: () =>
+        api.post<{ expiresAt: string }>('/api/auth/refresh'),
 
     getMe: () =>
         api.get<{ id: number; spotifyId: string; displayName: string; email: string }>('/api/auth/me'),
+
+    logout: () => api.post<{ message: string }>('/api/auth/logout'),
 
     searchUsers: (query: string) =>
         api.get<Array<{ id: number; spotifyId: string; displayName: string; email: string }>>(

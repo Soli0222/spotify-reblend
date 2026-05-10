@@ -13,8 +13,8 @@ interface AuthContextType {
     isLoading: boolean;
     isAuthenticated: boolean;
     login: () => Promise<void>;
-    logout: () => void;
-    handleCallback: (code: string) => Promise<void>;
+    logout: () => Promise<void>;
+    handleCallback: (code: string, state: string) => Promise<void>;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -28,18 +28,11 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     }, []);
 
     const checkAuth = async () => {
-        const userId = localStorage.getItem('userId');
-        if (!userId) {
-            setIsLoading(false);
-            return;
-        }
-
         try {
             const response = await authApi.getMe();
             setUser(response.data);
         } catch {
-            localStorage.removeItem('userId');
-            localStorage.removeItem('accessToken');
+            setUser(null);
         } finally {
             setIsLoading(false);
         }
@@ -55,11 +48,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const handleCallback = async (code: string) => {
+    const handleCallback = async (code: string, state: string) => {
         try {
-            const response = await authApi.callback(code);
-            localStorage.setItem('userId', response.data.user.id.toString());
-            localStorage.setItem('accessToken', response.data.accessToken);
+            const response = await authApi.callback(code, state);
             setUser(response.data.user);
         } catch (error) {
             console.error('Callback error:', error);
@@ -67,9 +58,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         }
     };
 
-    const logout = () => {
-        localStorage.removeItem('userId');
-        localStorage.removeItem('accessToken');
+    const logout = async () => {
+        try {
+            await authApi.logout();
+        } finally {
+            localStorage.removeItem('userId');
+            localStorage.removeItem('accessToken');
+        }
         setUser(null);
     };
 

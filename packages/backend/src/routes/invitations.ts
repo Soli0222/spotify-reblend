@@ -1,20 +1,20 @@
 import { Router, Request, Response } from 'express';
 import { pool } from '../config/database';
+import { requireAuth } from '../utils/auth';
+import { rateLimit } from '../utils/http';
 
 const router: Router = Router();
 
+router.use(requireAuth);
+
 // Send invitation to a user
-router.post('/playlists/:playlistId/invitations', async (req: Request, res: Response) => {
+router.post('/playlists/:playlistId/invitations', rateLimit({ windowMs: 60_000, max: 30, keyPrefix: 'invite-send' }), async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'];
+        const userId = req.authUser!.id;
         const { playlistId } = req.params;
         const { inviteeId } = req.body;
 
-        if (!userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
-
-        if (!inviteeId) {
+        if (!Number.isInteger(Number(inviteeId))) {
             return res.status(400).json({ error: 'Invitee ID is required' });
         }
 
@@ -74,11 +74,7 @@ router.post('/playlists/:playlistId/invitations', async (req: Request, res: Resp
 // Get user's received invitations
 router.get('/invitations', async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'];
-
-        if (!userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
+        const userId = req.authUser!.id;
 
         const result = await pool.query(
             `SELECT i.id, i.status, i.created_at,
@@ -109,12 +105,8 @@ router.get('/invitations', async (req: Request, res: Response) => {
 // Accept invitation
 router.post('/invitations/:id/accept', async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'];
+        const userId = req.authUser!.id;
         const { id } = req.params;
-
-        if (!userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
 
         // Get invitation
         const invitationResult = await pool.query(
@@ -155,12 +147,8 @@ router.post('/invitations/:id/accept', async (req: Request, res: Response) => {
 // Decline invitation
 router.post('/invitations/:id/decline', async (req: Request, res: Response) => {
     try {
-        const userId = req.headers['x-user-id'];
+        const userId = req.authUser!.id;
         const { id } = req.params;
-
-        if (!userId) {
-            return res.status(401).json({ error: 'Unauthorized' });
-        }
 
         const result = await pool.query(
             `UPDATE invitations 

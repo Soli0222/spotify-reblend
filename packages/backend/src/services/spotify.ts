@@ -37,7 +37,7 @@ export class SpotifyService {
         this.redirectUri = process.env.SPOTIFY_REDIRECT_URI || '';
     }
 
-    getAuthUrl(): string {
+    getAuthUrl(state: string): string {
         const scopes = [
             'user-read-private',
             'user-read-email',
@@ -51,6 +51,7 @@ export class SpotifyService {
             client_id: this.clientId,
             scope: scopes,
             redirect_uri: this.redirectUri,
+            state,
             show_dialog: 'true',
         });
 
