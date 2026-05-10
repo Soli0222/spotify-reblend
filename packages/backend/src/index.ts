@@ -1,10 +1,10 @@
 import express from 'express';
-import cors from 'cors';
 import path from 'path';
 import dotenv from 'dotenv';
 import { initDatabase } from './config/database';
 import { logger, requestLogger } from './utils/logger';
 import { startMetricsServer, metrics } from './utils/metrics';
+import { blockSensitivePaths, createCorsMiddleware, rateLimit, securityHeaders } from './utils/http';
 import authRoutes from './routes/auth';
 import playlistRoutes from './routes/playlists';
 import invitationRoutes from './routes/invitations';
@@ -59,9 +59,12 @@ app.use((req, res, next) => {
     next();
 });
 
+app.use(securityHeaders);
 app.use(requestLogger); // Structural logging
-app.use(cors());
-app.use(express.json());
+app.use(createCorsMiddleware());
+app.use(express.json({ limit: '32kb' }));
+app.use(blockSensitivePaths);
+app.use('/api', rateLimit({ windowMs: 60_000, max: 120, keyPrefix: 'api' }));
 
 // Health check
 app.get('/health', (_req, res) => {
@@ -72,6 +75,10 @@ app.get('/health', (_req, res) => {
 app.use('/api/auth', authRoutes);
 app.use('/api/playlists', playlistRoutes);
 app.use('/api', invitationRoutes);
+
+app.use('/api', (_req, res) => {
+    res.status(404).json({ error: 'Not found' });
+});
 
 // Serve static files from frontend build
 const frontendPath = path.join(__dirname, '../../frontend/dist');

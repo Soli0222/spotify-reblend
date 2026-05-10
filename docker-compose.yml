@@ -19,12 +19,10 @@ services:
 
   db:
     image: postgres:18.3-alpine3.23
-    ports:
-      - "5432:5432"
     env_file:
       - .config/postgres.env
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - postgres_data:/var/lib/postgresql
     healthcheck:
       test: [ "CMD-SHELL", "pg_isready -U reblend -d reblend" ]
       interval: 5s

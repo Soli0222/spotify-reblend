@@ -1,5 +1,6 @@
 import { Pool } from 'pg';
 import dotenv from 'dotenv';
+import { logger } from '../utils/logger';
 
 dotenv.config();
 
@@ -22,8 +23,32 @@ export const pool = new Pool({
   connectionString,
 });
 
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+async function connectWithRetry() {
+  const maxAttempts = parseInt(process.env.DB_CONNECT_ATTEMPTS || '12', 10);
+  const retryDelayMs = parseInt(process.env.DB_CONNECT_RETRY_MS || '2500', 10);
+  let lastError: unknown;
+
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      return await pool.connect();
+    } catch (error) {
+      lastError = error;
+      logger.warn({ err: error, attempt, maxAttempts }, 'Database connection failed, retrying');
+      if (attempt < maxAttempts) {
+        await sleep(retryDelayMs);
+      }
+    }
+  }
+
+  throw lastError;
+}
+
 export async function initDatabase(): Promise<void> {
-  const client = await pool.connect();
+  const client = await connectWithRetry();
   try {
     // Create tables if they don't exist
     await client.query(`

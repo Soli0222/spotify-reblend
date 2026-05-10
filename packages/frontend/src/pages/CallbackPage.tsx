@@ -15,6 +15,7 @@ export default function CallbackPage() {
         if (hasCalledRef.current) return;
 
         const code = searchParams.get('code');
+        const state = searchParams.get('state');
         const errorParam = searchParams.get('error');
 
         if (errorParam) {
@@ -22,9 +23,9 @@ export default function CallbackPage() {
             return;
         }
 
-        if (code) {
+        if (code && state) {
             hasCalledRef.current = true;
-            handleCallback(code)
+            handleCallback(code, state)
                 .then(() => {
                     navigate('/dashboard', { replace: true });
                 })

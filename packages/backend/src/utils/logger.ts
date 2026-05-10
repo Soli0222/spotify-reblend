@@ -36,9 +36,13 @@ export const requestLogger = pinoHttp({
             url: req.url,
             query: req.query,
             params: req.params,
+            remoteAddress: req.socket?.remoteAddress,
             headers: {
                 'user-agent': req.headers['user-agent'],
                 'content-type': req.headers['content-type'],
+                origin: req.headers.origin,
+                referer: req.headers.referer,
+                'x-forwarded-for': req.headers['x-forwarded-for'],
             },
         }),
         res: (res) => ({
