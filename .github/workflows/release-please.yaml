@@ -26,4 +26,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           TAG_NAME: ${{ steps.release.outputs.tag_name }}
-        run: gh workflow run docker.yaml --ref "$TAG_NAME"
+        run: gh workflow run docker.yaml --repo "$GITHUB_REPOSITORY" --ref "$TAG_NAME"
