@@ -31,24 +31,28 @@ jobs:
           echo "Found pending release-please PR #$pr_number"
           echo "pr_number=$pr_number" >> "$GITHUB_OUTPUT"
 
+      # The release PR is authored by github-actions[bot], so its own Test
+      # workflow runs require manual approval (action_required) and never
+      # complete - gh pr merge --auto and gh pr checks on the PR itself would
+      # wait/fail forever. The release PR only adds a version bump and
+      # changelog on top of main, and main is already exercised by Test on
+      # every push, so we instead verify the latest completed Test run on
+      # main succeeded and merge directly.
       - name: Merge release PR
         id: merge-pr
         if: ${{ steps.find-pr.outputs.pr_number != '' }}
         run: |
           pr_number="${{ steps.find-pr.outputs.pr_number }}"
 
-          if gh pr merge "$pr_number" --repo "$GITHUB_REPOSITORY" --squash --auto; then
-            echo "Auto-merge enabled for PR #$pr_number"
-          else
-            echo "gh pr merge --auto failed, falling back to manual checks verification"
-            if gh pr checks "$pr_number" --repo "$GITHUB_REPOSITORY"; then
-              echo "Checks are green, merging directly"
-              gh pr merge "$pr_number" --repo "$GITHUB_REPOSITORY" --squash
-            else
-              echo "Checks failed for PR #$pr_number, aborting"
-              exit 1
-            fi
+          conclusion=$(gh run list --repo "$GITHUB_REPOSITORY" --workflow=test.yaml --branch main --status completed -L 1 --json conclusion --jq '.[0].conclusion // empty')
+
+          if [ "$conclusion" != "success" ]; then
+            echo "Latest completed Test run on main did not succeed (conclusion: '$conclusion'), aborting"
+            exit 1
           fi
+
+          echo "Latest Test run on main succeeded, merging PR #$pr_number"
+          gh pr merge "$pr_number" --repo "$GITHUB_REPOSITORY" --squash
 
       - name: Wait for PR to be merged
         id: wait-merge
