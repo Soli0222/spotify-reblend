@@ -1,5 +1,13 @@
 # Changelog
 
+## [1.4.1](https://github.com/Soli0222/spotify-reblend/compare/v1.4.0...v1.4.1) (2026-07-26)
+
+
+### バグ修正・依存関係の更新
+
+* pass repository to docker dispatch in release workflow ([#186](https://github.com/Soli0222/spotify-reblend/issues/186)) ([fe18273](https://github.com/Soli0222/spotify-reblend/commit/fe18273d4aa7d7979630f4d1192c8ffb880cec7b))
+* use github app token for release automation ([#188](https://github.com/Soli0222/spotify-reblend/issues/188)) ([9b4b74f](https://github.com/Soli0222/spotify-reblend/commit/9b4b74f11f227ab7539673ecf95632ae1aeb9d72))
+
 ## [1.4.0](https://github.com/Soli0222/spotify-reblend/compare/v1.3.0...v1.4.0) (2026-07-26)
 
 
