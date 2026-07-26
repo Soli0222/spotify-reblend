@@ -22,7 +22,7 @@ jobs:
       - name: Find pending release-please PR
         id: find-pr
         run: |
-          pr_number=$(gh pr list --repo "$GITHUB_REPOSITORY" --label "autorelease: pending" --state open --json number --jq '.[0].number')
+          pr_number=$(gh pr list --repo "$GITHUB_REPOSITORY" --label "autorelease: pending" --state open --json number --jq '.[0].number // empty')
           if [ -z "$pr_number" ]; then
             echo "No pending release-please PR found. Nothing to do."
             echo "pr_number=" >> "$GITHUB_OUTPUT"
