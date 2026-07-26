@@ -1,0 +1,16 @@
+# Changelog
+
+## [1.4.0](https://github.com/Soli0222/spotify-reblend/compare/v1.3.0...v1.4.0) (2026-07-26)
+
+
+### 新機能
+
+* automate releases with release-please ([#182](https://github.com/Soli0222/spotify-reblend/issues/182)) ([f2d0de6](https://github.com/Soli0222/spotify-reblend/commit/f2d0de62a692cd8b682090da5b3ea3c35c64ad74))
+
+
+### バグ修正・依存関係の更新
+
+* merge weekly release PR based on main branch CI ([#185](https://github.com/Soli0222/spotify-reblend/issues/185)) ([58922c1](https://github.com/Soli0222/spotify-reblend/commit/58922c134c9dbf4bceae58d775e2f83809b6880f))
+* move renovate workflow into workflows directory ([dca8a39](https://github.com/Soli0222/spotify-reblend/commit/dca8a397f75dee47344c1aed7f5f77cabc94ddd8))
+* pass repository to renovate ([2214737](https://github.com/Soli0222/spotify-reblend/commit/22147375198138e339c0d7ea1f7f039e87abcf85))
+* use renovate app client id secret ([d4c8f0c](https://github.com/Soli0222/spotify-reblend/commit/d4c8f0c174ef5f7aed522a5fd91ac2e23945ae9b))
