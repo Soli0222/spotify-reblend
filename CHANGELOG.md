@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.5.0](https://github.com/Soli0222/spotify-reblend/compare/v1.4.1...v1.5.0) (2026-08-08)
+
+
+### 新機能
+
+* publish helm chart as OCI artifact from this repo ([#192](https://github.com/Soli0222/spotify-reblend/issues/192)) ([b4859d3](https://github.com/Soli0222/spotify-reblend/commit/b4859d3ff9e6909d2e510ef37adb826de2b9bb14))
+
 ## [1.4.1](https://github.com/Soli0222/spotify-reblend/compare/v1.4.0...v1.4.1) (2026-07-26)
 
 
