@@ -1,0 +1,50 @@
+{{- if .Values.postgres.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "spotify-reblend.fullname" . }}-postgres
+  labels:
+    {{- include "spotify-reblend.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgres
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "spotify-reblend.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: postgres
+  template:
+    metadata:
+      labels:
+        {{- include "spotify-reblend.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: postgres
+    spec:
+      containers:
+        - name: postgres
+          image: "{{ .Values.postgres.image.repository }}:{{ .Values.postgres.image.tag }}"
+          imagePullPolicy: {{ .Values.postgres.image.pullPolicy }}
+          ports:
+            - name: postgres
+              containerPort: 5432
+              protocol: TCP
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.postgres.auth.username | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgres.auth.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "spotify-reblend.postgres.secretName" . }}
+                  key: {{ include "spotify-reblend.postgres.secretKey" . }}
+          {{- if .Values.postgres.persistence.enabled }}
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql/data
+          {{- end }}
+      {{- if .Values.postgres.persistence.enabled }}
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: {{ include "spotify-reblend.fullname" . }}-postgres
+      {{- end }}
+{{- end }}
