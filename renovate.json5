@@ -37,7 +37,21 @@
       depNameTemplate: 'node',
       datasourceTemplate: 'docker',
     },
+    {
+      customType: 'regex',
+      managerFilePatterns: [
+        '/^charts/.+/values\\.yaml$/',
+      ],
+      matchStrings: [
+        'repository:\\s*(?<depName>[^\\s]+)\\s+tag:\\s*["\'](?<currentValue>[^"\']+)["\']',
+      ],
+      datasourceTemplate: 'docker',
+      versioningTemplate: 'docker',
+    },
   ],
+  'helm-values': {
+    enabled: false,
+  },
   packageRules: [
     {
       matchManagers: [
@@ -74,6 +88,35 @@
       commitMessageTopic: 'Node {{depName}}',
       semanticCommitType: 'fix',
       automerge: true,
+    },
+    {
+      matchManagers: [
+        'custom.regex',
+      ],
+      matchFileNames: [
+        'charts/**/values.yaml',
+      ],
+      commitMessageTopic: 'Chart image {{depName}}',
+      semanticCommitType: 'fix',
+      semanticCommitScope: 'chart',
+      addLabels: [
+        'chart',
+      ],
+    },
+    {
+      matchManagers: [
+        'custom.regex',
+      ],
+      matchFileNames: [
+        'charts/**/values.yaml',
+      ],
+      matchUpdateTypes: [
+        'major',
+      ],
+      automerge: false,
+      addLabels: [
+        'major-update',
+      ],
     },
   ],
 }
