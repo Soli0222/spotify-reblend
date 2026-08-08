@@ -1,0 +1,100 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "spotify-reblend.fullname" . }}
+  labels:
+    {{- include "spotify-reblend.labels" . | nindent 4 }}
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "spotify-reblend.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      annotations:
+      {{- with .Values.podAnnotations }}
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      labels:
+        {{- include "spotify-reblend.selectorLabels" . | nindent 8 }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      serviceAccountName: {{ include "spotify-reblend.serviceAccountName" . }}
+      securityContext:
+        {{- toYaml .Values.podSecurityContext | nindent 8 }}
+      containers:
+        - name: {{ .Chart.Name }}
+          securityContext:
+            {{- toYaml .Values.securityContext | nindent 12 }}
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
+          imagePullPolicy: {{ .Values.image.pullPolicy }}
+          ports:
+            - name: http
+              containerPort: {{ .Values.service.port }}
+              protocol: TCP
+            - name: metrics
+              containerPort: {{ .Values.metrics.port }}
+              protocol: TCP
+          env:
+            - name: PORT
+              value: {{ .Values.service.port | quote }}
+            - name: METRICS_PORT
+              value: {{ .Values.metrics.port | quote }}
+            - name: SPOTIFY_REDIRECT_URI
+              value: {{ .Values.config.spotifyRedirectUri | quote }}
+            - name: POSTGRES_USER
+              value: {{ include "spotify-reblend.postgres.user" . | quote }}
+            - name: POSTGRES_DB
+              value: {{ include "spotify-reblend.postgres.database" . | quote }}
+            - name: POSTGRES_HOST
+              value: {{ include "spotify-reblend.postgres.host" . | quote }}
+            - name: POSTGRES_PORT
+              value: {{ include "spotify-reblend.postgres.port" . | quote }}
+            - name: APP_ORIGIN
+              value: {{ .Values.config.appOrigin | quote }}
+            - name: ALLOWED_ORIGINS
+              value: {{ .Values.config.allowedOrigins | quote }}
+            - name: SPOTIFY_CLIENT_ID
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.existingSecret | default (include "spotify-reblend.fullname" .) }}
+                  key: SPOTIFY_CLIENT_ID
+            - name: SPOTIFY_CLIENT_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.existingSecret | default (include "spotify-reblend.fullname" .) }}
+                  key: SPOTIFY_CLIENT_SECRET
+            - name: AUTH_SECRET
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.existingSecret | default (include "spotify-reblend.fullname" .) }}
+                  key: AUTH_SECRET
+            - name: TOKEN_ENCRYPTION_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: {{ .Values.config.existingSecret | default (include "spotify-reblend.fullname" .) }}
+                  key: TOKEN_ENCRYPTION_KEY
+            {{- if or .Values.postgres.enabled .Values.externalPostgres.auth.existingSecret }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "spotify-reblend.postgres.secretName" . }}
+                  key: {{ include "spotify-reblend.postgres.secretKey" . }}
+            {{- end }}
+          resources:
+            {{- toYaml .Values.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

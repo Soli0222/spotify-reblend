@@ -1,0 +1,8 @@
+apiVersion: v2
+name: spotify-reblend
+description: A Helm chart for Spotify ReBlend application
+type: application
+sources:
+  - https://github.com/Soli0222/spotify-reblend
+version: 0.0.0
+appVersion: "0.0.0"
