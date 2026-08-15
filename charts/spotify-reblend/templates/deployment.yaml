@@ -53,6 +53,8 @@ spec:
               value: {{ .Values.otel.tracesSampler | quote }}
             - name: OTEL_TRACES_SAMPLER_ARG
               value: {{ .Values.otel.tracesSamplerArg | quote }}
+            - name: MIN_TRACK_DURATION_MS
+              value: {{ .Values.config.minTrackDurationMs | quote }}
             - name: SPOTIFY_REDIRECT_URI
               value: {{ .Values.config.spotifyRedirectUri | quote }}
             - name: POSTGRES_USER

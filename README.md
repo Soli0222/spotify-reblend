@@ -59,6 +59,8 @@ SPOTIFY_CLIENT_ID=あなたのClient ID
 SPOTIFY_CLIENT_SECRET=あなたのClient Secret
 ```
 
+ブレンド生成時には、既定で90秒未満のトップ曲を除外します。短尺の正規曲も残したい場合は、`MIN_TRACK_DURATION_MS` を調整してください。`0` に設定すると、この尺による除外を無効にできます。
+
 ### 3. アプリケーションを起動
 
 ```bash
@@ -143,6 +145,7 @@ docker-compose down -v
   - `reblend_playlist_created_total`: 作成されたプレイリスト総数
   - `reblend_blend_executed_total`: ブレンド実行回数
   - `reblend_active_users`: 現在の登録ユーザー数
+  - `reblend_tracks_filtered_total`: ブレンドから除外された曲数（`reason` は `duration` または `name`）
 
 #### Prometheus設定例 (`prometheus.yml`)
 

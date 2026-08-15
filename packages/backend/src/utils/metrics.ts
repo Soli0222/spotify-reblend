@@ -22,6 +22,12 @@ export const metrics = {
         labelNames: ['user_count'],
         registers: [registry],
     }),
+    tracksFiltered: new Counter({
+        name: 'reblend_tracks_filtered_total',
+        help: 'Total number of tracks filtered from blends',
+        labelNames: ['reason'],
+        registers: [registry],
+    }),
     activeUsers: new Gauge({
         name: 'reblend_active_users',
         help: 'Number of active users currently registered',
