@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { logger } from '../utils/logger';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
 const SPOTIFY_AUTH_BASE = 'https://accounts.spotify.com';
@@ -49,6 +50,34 @@ export function isRefreshTokenPermanentlyInvalid(error: unknown): boolean {
         && responseData !== null
         && 'error' in responseData
         && responseData.error === 'invalid_grant';
+}
+
+export const INSTRUMENTAL_TRACK_NAME_PATTERNS: readonly RegExp[] = [
+    /\binstrumental\b/i,
+    /インストゥルメンタル/i,
+    /インスト/i,
+    /\bkaraoke\b/i,
+    /カラオケ/i,
+    /\boff vocal\b/i,
+    /オフボーカル/i,
+    /\b-?inst\.?\b/i,
+    /\(inst\.?\)/i,
+    /\[inst\.?\]/i,
+    /\bno vocals?\b/i,
+    /\bwithout vocals?\b/i,
+    /\bbacking track\b/i,
+    /\binterlude\b/i,
+    /インタールード/i,
+    /\bintro\b/i,
+    /\boutro\b/i,
+    /\bskit\b/i,
+    /\boverture\b/i,
+    /序曲/i,
+    /\bSE\b/,
+];
+
+export function normalizeTrackName(name: string): string {
+    return name.normalize('NFKC').replace(/[〜～]/g, '~');
 }
 
 export class SpotifyService {
@@ -144,32 +173,15 @@ export class SpotifyService {
      * so we use name-based heuristics instead.
      */
     filterInstrumentalTracks(tracks: SpotifyTrack[]): SpotifyTrack[] {
-        // Common patterns that indicate instrumental versions
-        const instrumentalPatterns = [
-            /\binstrumental\b/i,
-            /インストゥルメンタル/i,
-            /インスト/i,
-            /\bkaraoke\b/i,
-            /カラオケ/i,
-            /\boff vocal\b/i,
-            /オフボーカル/i,
-            /\b-?inst\.?\b/i,
-            /\(inst\.?\)/i,
-            /\[inst\.?\]/i,
-            /\bno vocals?\b/i,
-            /\bwithout vocals?\b/i,
-            /\bbacking track\b/i,
-        ];
-
         return tracks.filter(track => {
-            const name = track.name.toLowerCase();
-            // Check if any pattern matches
-            for (const pattern of instrumentalPatterns) {
+            const name = normalizeTrackName(track.name);
+            for (const pattern of INSTRUMENTAL_TRACK_NAME_PATTERNS) {
                 if (pattern.test(name)) {
-                    return false; // Exclude this track
+                    logger.debug({ trackName: track.name, pattern: pattern.source }, 'Excluded instrumental track by name pattern');
+                    return false;
                 }
             }
-            return true; // Include this track
+            return true;
         });
     }
 
