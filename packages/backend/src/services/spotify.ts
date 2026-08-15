@@ -39,6 +39,18 @@ export interface TrackFilterResult {
 
 const DEFAULT_MIN_TRACK_DURATION_MS = 90000;
 
+export function isRefreshTokenPermanentlyInvalid(error: unknown): boolean {
+    if (!axios.isAxiosError(error) || error.response?.status !== 400) {
+        return false;
+    }
+
+    const responseData = error.response.data;
+    return typeof responseData === 'object'
+        && responseData !== null
+        && 'error' in responseData
+        && responseData.error === 'invalid_grant';
+}
+
 export class SpotifyService {
     private clientId: string;
     private clientSecret: string;

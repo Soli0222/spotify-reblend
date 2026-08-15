@@ -139,7 +139,7 @@ router.get('/:id', async (req: Request, res: Response) => {
 
         // Get members
         const membersResult = await pool.query(
-            `SELECT u.id, u.spotify_id, u.display_name, pm.role
+            `SELECT u.id, u.spotify_id, u.display_name, u.token_status, pm.role
        FROM playlist_members pm
        JOIN users u ON pm.user_id = u.id
        WHERE pm.playlist_id = $1`,
@@ -174,6 +174,7 @@ router.get('/:id', async (req: Request, res: Response) => {
                 spotifyId: m.spotify_id,
                 displayName: m.display_name,
                 role: m.role,
+                tokenStatus: m.token_status,
             })),
             pendingInvitations: invitationsResult.rows.map(i => ({
                 id: i.id,
@@ -221,7 +222,7 @@ router.get('/:id/tracks', async (req: Request, res: Response) => {
 
         // Get user's access token
         const userResult = await pool.query(
-            'SELECT access_token, refresh_token, token_expires_at FROM users WHERE id = $1',
+            'SELECT id, access_token, refresh_token, token_expires_at, token_status FROM users WHERE id = $1',
             [userId]
         );
 
@@ -336,7 +337,7 @@ router.post('/:id/generate', rateLimit({ windowMs: 60_000, max: 6, keyPrefix: 'p
                 'no-tracks': 'No tracks to add to playlist',
                 'owner-token-unavailable': 'Owner access token not available',
             } as const;
-            return res.status(400).json({ error: errors[outcome.reason] });
+            return res.status(400).json({ error: errors[outcome.reason], skippedMembers: outcome.skippedMembers });
         }
 
         res.json({
@@ -344,6 +345,7 @@ router.post('/:id/generate', rateLimit({ windowMs: 60_000, max: 6, keyPrefix: 'p
             spotifyPlaylistId: outcome.spotifyPlaylistId,
             spotifyUrl: outcome.spotifyUrl,
             trackCount: outcome.trackCount,
+            skippedMembers: outcome.skippedMembers,
         });
 
         // Metrics & Logging
@@ -383,7 +385,7 @@ router.delete('/:id', async (req: Request, res: Response) => {
         if (deleteFromSpotify && playlist.spotify_playlist_id) {
             try {
                 const userResult = await pool.query(
-                    'SELECT access_token, refresh_token, token_expires_at FROM users WHERE id = $1',
+                    'SELECT id, access_token, refresh_token, token_expires_at, token_status FROM users WHERE id = $1',
                     [userId]
                 );
 

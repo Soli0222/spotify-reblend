@@ -1,5 +1,5 @@
 import { afterEach, describe, it, expect } from 'vitest';
-import { spotifyService } from './spotify';
+import { isRefreshTokenPermanentlyInvalid, spotifyService } from './spotify';
 
 // Mock track for testing
 function createMockTrack(name: string, duration_ms?: number) {
@@ -122,6 +122,35 @@ describe('filterInstrumentalTracks', () => {
 
         const result = spotifyService.filterInstrumentalTracks(tracks);
         expect(result).toHaveLength(0);
+    });
+});
+
+describe('isRefreshTokenPermanentlyInvalid', () => {
+    function axiosError(status: number, data: unknown) {
+        return {
+            isAxiosError: true,
+            response: { status, data },
+        };
+    }
+
+    it('identifies Spotify invalid_grant responses', () => {
+        expect(isRefreshTokenPermanentlyInvalid(axiosError(400, { error: 'invalid_grant' }))).toBe(true);
+    });
+
+    it('does not treat other 400 responses as permanent invalidation', () => {
+        expect(isRefreshTokenPermanentlyInvalid(axiosError(400, { error: 'invalid_request' }))).toBe(false);
+    });
+
+    it('does not treat 500 responses as permanent invalidation', () => {
+        expect(isRefreshTokenPermanentlyInvalid(axiosError(500, { error: 'invalid_grant' }))).toBe(false);
+    });
+
+    it('does not treat timeouts as permanent invalidation', () => {
+        expect(isRefreshTokenPermanentlyInvalid({ isAxiosError: true, code: 'ECONNABORTED' })).toBe(false);
+    });
+
+    it('does not treat response bodies without an error field as permanent invalidation', () => {
+        expect(isRefreshTokenPermanentlyInvalid(axiosError(400, {}))).toBe(false);
     });
 });
 

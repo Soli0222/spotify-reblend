@@ -5,6 +5,7 @@ import { Server } from 'http';
 import path from 'path';
 import dotenv from 'dotenv';
 import { initDatabase, pool } from './config/database';
+import { refreshTokenInvalidUsersGauge } from './services/spotify-token';
 import { logger, requestLogger } from './utils/logger';
 import { startMetricsServer, metrics } from './utils/metrics';
 import { blockSensitivePaths, createCorsMiddleware, rateLimit, securityHeaders } from './utils/http';
@@ -107,6 +108,7 @@ app.use((err: Error, _req: express.Request, res: express.Response, _next: expres
 async function start() {
     try {
         await initDatabase();
+        await refreshTokenInvalidUsersGauge();
 
         // Start Metrics Server
         metricsServer = startMetricsServer(METRICS_PORT);

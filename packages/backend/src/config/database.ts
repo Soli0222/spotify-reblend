@@ -60,6 +60,8 @@ export async function initDatabase(): Promise<void> {
         access_token TEXT,
         refresh_token TEXT,
         token_expires_at TIMESTAMP,
+        token_status VARCHAR(20) DEFAULT 'active',
+        token_invalidated_at TIMESTAMP,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -110,6 +112,9 @@ export async function initDatabase(): Promise<void> {
       CREATE INDEX IF NOT EXISTS idx_playlists_auto_update
         ON playlists (auto_update_enabled)
         WHERE auto_update_enabled;
+
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS token_status VARCHAR(20) DEFAULT 'active';
+      ALTER TABLE users ADD COLUMN IF NOT EXISTS token_invalidated_at TIMESTAMP;
     `);
     console.log('Database tables initialized');
   } finally {

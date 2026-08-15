@@ -33,6 +33,16 @@ export const metrics = {
         help: 'Number of active users currently registered',
         registers: [registry],
     }),
+    tokenInvalidated: new Counter({
+        name: 'reblend_token_invalidated_total',
+        help: 'Total number of users whose Spotify refresh token was permanently invalidated',
+        registers: [registry],
+    }),
+    usersTokenInvalid: new Gauge({
+        name: 'reblend_users_token_invalid',
+        help: 'Number of users with a permanently invalid Spotify refresh token',
+        registers: [registry],
+    }),
     httpRequests: new Counter({
         name: 'reblend_http_requests_total',
         help: 'Total number of HTTP requests',
