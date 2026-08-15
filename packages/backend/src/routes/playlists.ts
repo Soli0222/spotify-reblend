@@ -1,11 +1,12 @@
 import { Router, Request, Response } from 'express';
 import { pool } from '../config/database';
-import { spotifyService, SpotifyTrack } from '../services/spotify';
-import { blendTracks, SortMode } from '../services/blend';
+import { spotifyService } from '../services/spotify';
+import { SortMode } from '../services/blend';
+import { generatePlaylist } from '../services/playlist-generation';
+import { getValidAccessToken } from '../services/spotify-token';
 import { logger } from '../utils/logger';
 import { metrics } from '../utils/metrics';
 import { requireAuth } from '../utils/auth';
-import { decryptSecret, encryptSecret } from '../utils/crypto';
 import { rateLimit } from '../utils/http';
 
 const router: Router = Router();
@@ -219,20 +220,9 @@ router.get('/:id/tracks', async (req: Request, res: Response) => {
             return res.status(404).json({ error: 'User not found' });
         }
 
-        let accessToken = decryptSecret(userResult.rows[0].access_token);
-
-        // Refresh if needed
-        if (new Date(userResult.rows[0].token_expires_at) <= new Date()) {
-            const refreshToken = decryptSecret(userResult.rows[0].refresh_token);
-            if (!refreshToken) {
-                return res.status(400).json({ error: 'Refresh token not available' });
-            }
-            const tokens = await spotifyService.refreshToken(refreshToken);
-            accessToken = tokens.access_token;
-            await pool.query(
-                'UPDATE users SET access_token = $1, refresh_token = COALESCE($2, refresh_token), token_expires_at = $3 WHERE id = $4',
-                [encryptSecret(accessToken), encryptSecret(tokens.refresh_token), new Date(Date.now() + tokens.expires_in * 1000), userId]
-            );
+        const { accessToken, refreshTokenUnavailable } = await getValidAccessToken(userResult.rows[0]);
+        if (refreshTokenUnavailable) {
+            return res.status(400).json({ error: 'Refresh token not available' });
         }
         if (!accessToken) {
             return res.status(400).json({ error: 'Access token not available' });
@@ -255,35 +245,6 @@ router.get('/:id/tracks', async (req: Request, res: Response) => {
     }
 });
 
-// Helper function to get valid access token for a member
-async function getValidAccessToken(member: {
-    id: number;
-    access_token: string | null;
-    refresh_token: string | null;
-    token_expires_at: Date;
-}): Promise<string | null> {
-    let accessToken = decryptSecret(member.access_token);
-
-    if (new Date(member.token_expires_at) <= new Date()) {
-        try {
-            const refreshToken = decryptSecret(member.refresh_token);
-            if (!refreshToken) return null;
-
-            const tokens = await spotifyService.refreshToken(refreshToken);
-            accessToken = tokens.access_token;
-            await pool.query(
-                `UPDATE users SET access_token = $1, refresh_token = COALESCE($2, refresh_token), token_expires_at = $3 WHERE id = $4`,
-                [encryptSecret(accessToken), encryptSecret(tokens.refresh_token), new Date(Date.now() + tokens.expires_in * 1000), member.id]
-            );
-        } catch (error) {
-            logger.error({ err: error, memberId: member.id }, 'Failed to refresh token');
-            return null;
-        }
-    }
-
-    return accessToken;
-}
-
 // Generate or regenerate the blended playlist on Spotify
 router.post('/:id/generate', rateLimit({ windowMs: 60_000, max: 6, keyPrefix: 'playlist-generate' }), async (req: Request, res: Response) => {
     try {
@@ -305,145 +266,31 @@ router.post('/:id/generate', rateLimit({ windowMs: 60_000, max: 6, keyPrefix: 'p
             return res.status(403).json({ error: 'Only the owner can generate the playlist' });
         }
 
-        const playlist = playlistResult.rows[0];
+        const outcome = await generatePlaylist(Number(id), { sortMode, requestedBy: userId });
 
-        // Get all members
-        const membersResult = await pool.query(
-            `SELECT u.id, u.spotify_id, u.access_token, u.refresh_token, u.token_expires_at
-       FROM playlist_members pm
-       JOIN users u ON pm.user_id = u.id
-       WHERE pm.playlist_id = $1
-       ORDER BY pm.created_at ASC, pm.id ASC`,
-            [id]
-        );
-
-        if (membersResult.rows.length === 0) {
-            return res.status(400).json({ error: 'No members in playlist' });
-        }
-
-        // Collect top tracks from each member
-        const userTracks = new Map<string, SpotifyTrack[]>();
-        let ownerAccessToken: string | null = null;
-
-        for (const member of membersResult.rows) {
-            const accessToken = await getValidAccessToken(member);
-            if (!accessToken) continue;
-
-            // Save owner's access token for later
-            if (member.id === userId) {
-                ownerAccessToken = accessToken;
-            }
-
-            try {
-                let tracks = await spotifyService.getTopTracks(accessToken, 50);
-
-                // Filter out instrumental tracks based on name patterns
-                tracks = spotifyService.filterInstrumentalTracks(tracks);
-
-                userTracks.set(member.spotify_id, tracks);
-            } catch (error) {
-                logger.error({ err: error, memberId: member.id }, 'Failed to get top tracks');
-            }
-        }
-
-        if (userTracks.size === 0) {
-            return res.status(400).json({ error: 'Could not get tracks from any member' });
-        }
-
-        // Blend tracks
-        const { tracks } = await blendTracks(userTracks, { totalTracks: 100, sortMode });
-
-        if (tracks.length === 0) {
-            return res.status(400).json({ error: 'No tracks to add to playlist' });
-        }
-
-        // Get owner's info
-        const ownerResult = await pool.query(
-            'SELECT spotify_id, access_token FROM users WHERE id = $1',
-            [userId]
-        );
-        const owner = ownerResult.rows[0];
-
-        if (!ownerAccessToken) {
-            ownerAccessToken = decryptSecret(owner.access_token);
-        }
-
-        // Ensure we have an access token
-        if (!ownerAccessToken) {
-            return res.status(400).json({ error: 'Owner access token not available' });
-        }
-
-        let spotifyPlaylistId: string | null = playlist.spotify_playlist_id;
-        let spotifyUrl = '';
-
-        // Check if we're regenerating an existing playlist
-        if (spotifyPlaylistId) {
-            // Clear existing tracks and add new ones
-            await spotifyService.clearPlaylistTracks(ownerAccessToken, spotifyPlaylistId);
-            const trackUris = tracks.map(t => t.uri);
-            await spotifyService.addTracksToPlaylist(ownerAccessToken, spotifyPlaylistId, trackUris);
-            spotifyUrl = `https://open.spotify.com/playlist/${spotifyPlaylistId}`;
-        } else {
-            // Create new Spotify playlist
-            const spotifyPlaylist = await spotifyService.createPlaylist(
-                ownerAccessToken,
-                owner.spotify_id,
-                playlist.name,
-                playlist.description || `ReBlend playlist with ${membersResult.rows.length} members`
-            );
-
-            spotifyPlaylistId = spotifyPlaylist.id;
-            spotifyUrl = spotifyPlaylist.external_urls.spotify;
-
-            // Add tracks to playlist
-            const trackUris = tracks.map(t => t.uri);
-            await spotifyService.addTracksToPlaylist(ownerAccessToken, spotifyPlaylistId, trackUris);
-
-            // Update playlist with Spotify ID
-            await pool.query(
-                `UPDATE playlists SET spotify_playlist_id = $1, status = 'generated', updated_at = CURRENT_TIMESTAMP
-           WHERE id = $2`,
-                [spotifyPlaylistId, id]
-            );
-
-            // Follow playlist for all members
-            for (const member of membersResult.rows) {
-                if (member.id !== userId) {
-                    try {
-                        const accessToken = await getValidAccessToken(member);
-                        if (accessToken) {
-                            await spotifyService.followPlaylist(accessToken, spotifyPlaylistId);
-                        }
-                    } catch (error) {
-                        logger.error({ err: error, memberId: member.id }, 'Failed to follow playlist');
-                    }
-                }
-            }
-        }
-
-        // Update status if not already generated
-        if (playlist.status !== 'generated') {
-            await pool.query(
-                `UPDATE playlists SET status = 'generated', updated_at = CURRENT_TIMESTAMP WHERE id = $1`,
-                [id]
-            );
+        if (!outcome.ok) {
+            const errors = {
+                'no-members': 'No members in playlist',
+                'no-tokens': 'Could not get tracks from any member',
+                'no-tracks': 'No tracks to add to playlist',
+                'owner-token-unavailable': 'Owner access token not available',
+            } as const;
+            return res.status(400).json({ error: errors[outcome.reason] });
         }
 
         res.json({
-            message: spotifyPlaylistId === playlist.spotify_playlist_id
-                ? 'Playlist regenerated successfully'
-                : 'Playlist generated successfully',
-            spotifyPlaylistId,
-            spotifyUrl,
-            trackCount: tracks.length,
+            message: outcome.created ? 'Playlist generated successfully' : 'Playlist regenerated successfully',
+            spotifyPlaylistId: outcome.spotifyPlaylistId,
+            spotifyUrl: outcome.spotifyUrl,
+            trackCount: outcome.trackCount,
         });
 
         // Metrics & Logging
-        metrics.blendExecuted.inc({ user_count: membersResult.rows.length });
+        metrics.blendExecuted.inc({ user_count: outcome.memberCount });
         logger.info({
             playlistId: id,
-            trackCount: tracks.length,
-            memberCount: membersResult.rows.length
+            trackCount: outcome.trackCount,
+            memberCount: outcome.memberCount
         }, 'Playlist generated');
 
     } catch (error) {
@@ -479,20 +326,10 @@ router.delete('/:id', async (req: Request, res: Response) => {
                     [userId]
                 );
 
-                let accessToken = decryptSecret(userResult.rows[0].access_token);
+                const { accessToken, refreshTokenUnavailable } = await getValidAccessToken(userResult.rows[0]);
 
-                // Refresh if needed
-                if (new Date(userResult.rows[0].token_expires_at) <= new Date()) {
-                    const refreshToken = decryptSecret(userResult.rows[0].refresh_token);
-                    if (!refreshToken) {
-                        throw new Error('Refresh token not available');
-                    }
-                    const tokens = await spotifyService.refreshToken(refreshToken);
-                    accessToken = tokens.access_token;
-                    await pool.query(
-                        'UPDATE users SET access_token = $1, refresh_token = COALESCE($2, refresh_token), token_expires_at = $3 WHERE id = $4',
-                        [encryptSecret(accessToken), encryptSecret(tokens.refresh_token), new Date(Date.now() + tokens.expires_in * 1000), userId]
-                    );
+                if (refreshTokenUnavailable) {
+                    throw new Error('Refresh token not available');
                 }
 
                 if (!accessToken) {
