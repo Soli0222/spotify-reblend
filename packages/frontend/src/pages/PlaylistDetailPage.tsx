@@ -38,6 +38,10 @@ export default function PlaylistDetailPage() {
     } | null>(null);
     const [sortMode, setSortMode] = useState<SortMode>('shuffle');
 
+    // Auto update state
+    const [isUpdatingAutoUpdate, setIsUpdatingAutoUpdate] = useState(false);
+    const [autoUpdateError, setAutoUpdateError] = useState<string | null>(null);
+
     // Delete state
     const [isDeleting, setIsDeleting] = useState(false);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -156,6 +160,37 @@ export default function PlaylistDetailPage() {
             setIsDeleting(false);
             setShowDeleteConfirm(false);
         }
+    };
+
+    const handleAutoUpdate = async (enabled: boolean, autoUpdateSortMode: SortMode) => {
+        if (!id || !playlist || isUpdatingAutoUpdate) return;
+
+        setIsUpdatingAutoUpdate(true);
+        setAutoUpdateError(null);
+
+        try {
+            const response = await playlistApi.setAutoUpdate(parseInt(id), {
+                enabled,
+                sortMode: autoUpdateSortMode,
+            });
+            setPlaylist(currentPlaylist => currentPlaylist ? {
+                ...currentPlaylist,
+                ...response.data,
+            } : currentPlaylist);
+        } catch (err) {
+            console.error('Failed to update auto update settings:', err);
+            setAutoUpdateError('自動更新の設定に失敗しました');
+        } finally {
+            setIsUpdatingAutoUpdate(false);
+        }
+    };
+
+    const formatAutoUpdateTime = (value: string) => {
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return null;
+
+        const twoDigits = (number: number) => String(number).padStart(2, '0');
+        return `${date.getFullYear()}/${twoDigits(date.getMonth() + 1)}/${twoDigits(date.getDate())} ${twoDigits(date.getHours())}:${twoDigits(date.getMinutes())}`;
     };
 
     if (isLoading) {
@@ -441,6 +476,91 @@ export default function PlaylistDetailPage() {
                             </div>
                         </section>
                     )}
+
+                    {/* Auto update section */}
+                    <section className="detail-section">
+                        <h2 className="section-title">
+                            <span className="section-icon">🗓️</span>
+                            自動更新
+                        </h2>
+                        <div className="auto-update-card card">
+                            {isOwner ? (
+                                <>
+                                    <label className="auto-update-toggle">
+                                        <input
+                                            type="checkbox"
+                                            role="switch"
+                                            checked={playlist.autoUpdateEnabled}
+                                            disabled={playlist.status !== 'generated' || isUpdatingAutoUpdate}
+                                            onChange={(event) => handleAutoUpdate(event.target.checked, playlist.autoUpdateSortMode)}
+                                        />
+                                        <span className="auto-update-toggle-track" aria-hidden="true">
+                                            <span className="auto-update-toggle-thumb"></span>
+                                        </span>
+                                        <span>毎日自動で再生成する</span>
+                                    </label>
+
+                                    {playlist.status !== 'generated' && (
+                                        <p className="auto-update-hint">まず一度生成してください</p>
+                                    )}
+
+                                    <div className="sort-mode-selector">
+                                        <label className="sort-mode-label">自動更新時の曲の並び順:</label>
+                                        <div className="sort-mode-options">
+                                            <label className={`sort-mode-option ${playlist.autoUpdateSortMode === 'shuffle' ? 'selected' : ''}`}>
+                                                <input
+                                                    type="radio"
+                                                    name="autoUpdateSortMode"
+                                                    value="shuffle"
+                                                    checked={playlist.autoUpdateSortMode === 'shuffle'}
+                                                    disabled={playlist.status !== 'generated' || isUpdatingAutoUpdate}
+                                                    onChange={() => handleAutoUpdate(playlist.autoUpdateEnabled, 'shuffle')}
+                                                />
+                                                <span className="sort-mode-icon">🎲</span>
+                                                <span className="sort-mode-text">
+                                                    <span className="sort-mode-title">シャッフル</span>
+                                                    <span className="sort-mode-desc">ランダムに並べる</span>
+                                                </span>
+                                            </label>
+                                            <label className={`sort-mode-option ${playlist.autoUpdateSortMode === 'smart' ? 'selected' : ''}`}>
+                                                <input
+                                                    type="radio"
+                                                    name="autoUpdateSortMode"
+                                                    value="smart"
+                                                    checked={playlist.autoUpdateSortMode === 'smart'}
+                                                    disabled={playlist.status !== 'generated' || isUpdatingAutoUpdate}
+                                                    onChange={() => handleAutoUpdate(playlist.autoUpdateEnabled, 'smart')}
+                                                />
+                                                <span className="sort-mode-icon">✨</span>
+                                                <span className="sort-mode-text">
+                                                    <span className="sort-mode-title">スマートソート</span>
+                                                    <span className="sort-mode-desc">テンポ・エナジーでスムーズに</span>
+                                                </span>
+                                            </label>
+                                        </div>
+                                    </div>
+
+                                    {autoUpdateError && (
+                                        <div className="form-error">{autoUpdateError}</div>
+                                    )}
+                                </>
+                            ) : (
+                                <p className="auto-update-readonly">
+                                    自動更新は{playlist.autoUpdateEnabled ? '有効' : '無効'}です
+                                    （並び順: {playlist.autoUpdateSortMode === 'smart' ? 'スマートソート' : 'シャッフル'}）
+                                </p>
+                            )}
+
+                            {playlist.lastAutoUpdatedAt && formatAutoUpdateTime(playlist.lastAutoUpdatedAt) && (
+                                <p className="auto-update-status">
+                                    最終自動更新: {formatAutoUpdateTime(playlist.lastAutoUpdatedAt)}
+                                </p>
+                            )}
+                            {playlist.lastAutoUpdateStatus === 'failed' && (
+                                <p className="auto-update-warning">直近の自動更新に失敗しました</p>
+                            )}
+                        </div>
+                    </section>
 
                     {/* Already generated - Spotify link */}
                     {playlist.status === 'generated' && playlist.spotifyPlaylistId && !generateResult && (
