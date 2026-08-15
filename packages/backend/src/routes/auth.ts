@@ -10,8 +10,9 @@ import {
     setOAuthStateCookie,
     verifyOAuthState
 } from '../utils/auth';
-import { decryptSecret, encryptSecret } from '../utils/crypto';
+import { encryptSecret } from '../utils/crypto';
 import { rateLimit } from '../utils/http';
+import { getValidAccessToken, refreshTokenInvalidUsersGauge } from '../services/spotify-token';
 
 const router: Router = Router();
 
@@ -46,8 +47,8 @@ router.post('/callback', rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'auth
 
         // Upsert user in database
         const result = await pool.query(
-            `INSERT INTO users (spotify_id, display_name, email, access_token, refresh_token, token_expires_at, updated_at)
-       VALUES ($1, $2, $3, $4, $5, $6, CURRENT_TIMESTAMP)
+            `INSERT INTO users (spotify_id, display_name, email, access_token, refresh_token, token_expires_at, token_status, token_invalidated_at, updated_at)
+       VALUES ($1, $2, $3, $4, $5, $6, 'active', NULL, CURRENT_TIMESTAMP)
        ON CONFLICT (spotify_id) 
        DO UPDATE SET 
          display_name = EXCLUDED.display_name,
@@ -55,6 +56,8 @@ router.post('/callback', rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'auth
          access_token = EXCLUDED.access_token,
          refresh_token = COALESCE(EXCLUDED.refresh_token, users.refresh_token),
          token_expires_at = EXCLUDED.token_expires_at,
+         token_status = 'active',
+         token_invalidated_at = NULL,
          updated_at = CURRENT_TIMESTAMP
        RETURNING id, spotify_id, display_name, email`,
             [
@@ -66,6 +69,8 @@ router.post('/callback', rateLimit({ windowMs: 60_000, max: 10, keyPrefix: 'auth
                 expiresAt
             ]
         );
+
+        await refreshTokenInvalidUsersGauge();
 
         const user = result.rows[0];
         setAuthCookie(res, { id: user.id, spotifyId: user.spotify_id });
@@ -91,9 +96,9 @@ router.post('/refresh', requireAuth, rateLimit({ windowMs: 60_000, max: 20, keyP
     try {
         const userId = req.authUser!.id;
 
-        // Get user's refresh token
+        // Get user's token data. The shared helper owns refresh-state persistence.
         const userResult = await pool.query(
-            'SELECT refresh_token FROM users WHERE id = $1',
+            'SELECT id, access_token, refresh_token, token_expires_at, token_status FROM users WHERE id = $1',
             [userId]
         );
 
@@ -101,25 +106,15 @@ router.post('/refresh', requireAuth, rateLimit({ windowMs: 60_000, max: 20, keyP
             return res.status(404).json({ error: 'User not found' });
         }
 
-        const refreshToken = decryptSecret(userResult.rows[0].refresh_token);
-        if (!refreshToken) {
+        const { accessToken, refreshTokenUnavailable, expiresAt } = await getValidAccessToken(userResult.rows[0], {
+            forceRefresh: true,
+        });
+        if (refreshTokenUnavailable) {
             return res.status(400).json({ error: 'Refresh token not available' });
         }
-
-        // Get new tokens from Spotify
-        const tokens = await spotifyService.refreshToken(refreshToken);
-        const expiresAt = new Date(Date.now() + tokens.expires_in * 1000);
-
-        // Update user's tokens
-        await pool.query(
-            `UPDATE users SET 
-         access_token = $1, 
-         refresh_token = COALESCE($2, refresh_token),
-         token_expires_at = $3,
-         updated_at = CURRENT_TIMESTAMP
-       WHERE id = $4`,
-            [encryptSecret(tokens.access_token), encryptSecret(tokens.refresh_token), expiresAt, userId]
-        );
+        if (!accessToken || !expiresAt) {
+            return res.status(500).json({ error: 'Token refresh failed' });
+        }
 
         res.json({
             expiresAt: expiresAt.toISOString(),
@@ -136,7 +131,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
         const userId = req.authUser!.id;
 
         const result = await pool.query(
-            'SELECT id, spotify_id, display_name, email FROM users WHERE id = $1',
+            'SELECT id, spotify_id, display_name, email, token_status FROM users WHERE id = $1',
             [userId]
         );
 
@@ -150,6 +145,7 @@ router.get('/me', requireAuth, async (req: Request, res: Response) => {
             spotifyId: user.spotify_id,
             displayName: user.display_name,
             email: user.email,
+            tokenStatus: user.token_status,
         });
     } catch (error) {
         console.error('Get user error:', error);

@@ -6,9 +6,27 @@ import { decryptSecret } from '../utils/crypto';
 import { logger } from '../utils/logger';
 import { metrics } from '../utils/metrics';
 
+export type SkippedMember = {
+    id: number;
+    displayName: string | null;
+    reason: 'token-invalid' | 'no-tracks';
+};
+
 export type GenerateOutcome =
-    | { ok: true; spotifyPlaylistId: string; spotifyUrl: string; trackCount: number; created: boolean; memberCount: number }
-    | { ok: false; reason: 'no-members' | 'no-tokens' | 'no-tracks' | 'owner-token-unavailable' };
+    | {
+        ok: true;
+        spotifyPlaylistId: string;
+        spotifyUrl: string;
+        trackCount: number;
+        created: boolean;
+        memberCount: number;
+        skippedMembers: SkippedMember[];
+    }
+    | {
+        ok: false;
+        reason: 'no-members' | 'no-tokens' | 'no-tracks' | 'owner-token-unavailable';
+        skippedMembers: SkippedMember[];
+    };
 
 export async function generatePlaylist(
     playlistId: number,
@@ -24,7 +42,7 @@ export async function generatePlaylist(
     const playlist = playlistResult.rows[0];
 
     const membersResult = await pool.query(
-        `SELECT u.id, u.spotify_id, u.access_token, u.refresh_token, u.token_expires_at
+        `SELECT u.id, u.spotify_id, u.display_name, u.access_token, u.refresh_token, u.token_expires_at, u.token_status
        FROM playlist_members pm
        JOIN users u ON pm.user_id = u.id
        WHERE pm.playlist_id = $1
@@ -33,19 +51,27 @@ export async function generatePlaylist(
     );
 
     if (membersResult.rows.length === 0) {
-        return { ok: false, reason: 'no-members' };
+        return { ok: false, reason: 'no-members', skippedMembers: [] };
     }
 
     const userTracks = new Map<string, SpotifyTrack[]>();
+    const skippedMembers: SkippedMember[] = [];
     let ownerAccessToken: string | null = null;
 
     for (const member of membersResult.rows) {
-        const { accessToken } = await getValidAccessToken(member, {
+        const { accessToken, tokenInvalid } = await getValidAccessToken(member, {
             onRefreshError: (error) => {
                 logger.error({ err: error, memberId: member.id }, 'Failed to refresh token');
             },
         });
-        if (!accessToken) continue;
+        if (!accessToken) {
+            skippedMembers.push({
+                id: member.id,
+                displayName: member.display_name,
+                reason: tokenInvalid ? 'token-invalid' : 'no-tracks',
+            });
+            continue;
+        }
 
         if (member.id === playlist.owner_id) {
             ownerAccessToken = accessToken;
@@ -69,20 +95,24 @@ export async function generatePlaylist(
                 filteredByName: filterResult.filteredByName,
                 remaining: tracks.length,
             }, 'Filtered tracks for blend');
+            if (tracks.length === 0) {
+                skippedMembers.push({ id: member.id, displayName: member.display_name, reason: 'no-tracks' });
+            }
             userTracks.set(member.spotify_id, tracks);
         } catch (error) {
             logger.error({ err: error, memberId: member.id }, 'Failed to get top tracks');
+            skippedMembers.push({ id: member.id, displayName: member.display_name, reason: 'no-tracks' });
         }
     }
 
     if (userTracks.size === 0) {
-        return { ok: false, reason: 'no-tokens' };
+        return { ok: false, reason: 'no-tokens', skippedMembers };
     }
 
     const { tracks } = await blendTracks(userTracks, { totalTracks: 100, sortMode: options.sortMode });
 
     if (tracks.length === 0) {
-        return { ok: false, reason: 'no-tracks' };
+        return { ok: false, reason: 'no-tracks', skippedMembers };
     }
 
     const ownerResult = await pool.query(
@@ -96,7 +126,7 @@ export async function generatePlaylist(
     }
 
     if (!ownerAccessToken) {
-        return { ok: false, reason: 'owner-token-unavailable' };
+        return { ok: false, reason: 'owner-token-unavailable', skippedMembers };
     }
 
     const created = !playlist.spotify_playlist_id;
@@ -156,5 +186,6 @@ export async function generatePlaylist(
         trackCount: tracks.length,
         created,
         memberCount: membersResult.rows.length,
+        skippedMembers,
     };
 }

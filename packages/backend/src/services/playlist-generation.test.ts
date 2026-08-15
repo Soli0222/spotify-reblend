@@ -12,6 +12,7 @@ const mocks = vi.hoisted(() => ({
     clearPlaylistTracks: vi.fn(),
     followPlaylist: vi.fn(),
     refreshToken: vi.fn(),
+    isRefreshTokenPermanentlyInvalid: vi.fn(),
     tracksFiltered: vi.fn(),
     loggerInfo: vi.fn(),
 }));
@@ -34,6 +35,7 @@ vi.mock('./spotify', () => ({
         followPlaylist: mocks.followPlaylist,
         refreshToken: mocks.refreshToken,
     },
+    isRefreshTokenPermanentlyInvalid: mocks.isRefreshTokenPermanentlyInvalid,
 }));
 
 vi.mock('../utils/auth', () => ({
@@ -69,6 +71,7 @@ import playlistsRouter from '../routes/playlists';
 const member = {
     id: 1,
     spotify_id: 'owner-spotify-id',
+    display_name: 'Owner',
     access_token: 'owner-access-token',
     refresh_token: 'owner-refresh-token',
     token_expires_at: new Date(Date.now() + 60_000),
@@ -130,6 +133,7 @@ describe('generatePlaylist', () => {
     beforeEach(() => {
         vi.clearAllMocks();
         mocks.query.mockReset();
+        mocks.isRefreshTokenPermanentlyInvalid.mockReturnValue(false);
         setSuccessfulTrackCollection();
     });
 
@@ -151,6 +155,7 @@ describe('generatePlaylist', () => {
             trackCount: 1,
             created: true,
             memberCount: 1,
+            skippedMembers: [],
         });
         expect(mocks.createPlaylist).toHaveBeenCalledWith(
             'owner-access-token',
@@ -244,6 +249,7 @@ describe('generatePlaylist', () => {
                 spotifyPlaylistId: 'new-spotify-playlist',
                 spotifyUrl: 'https://open.spotify.com/playlist/new-spotify-playlist',
                 trackCount: 1,
+                skippedMembers: [{ id: 1, displayName: 'Owner', reason: 'no-tracks' }],
             },
         });
         expect(mocks.createPlaylist).toHaveBeenCalledWith(
@@ -253,6 +259,123 @@ describe('generatePlaylist', () => {
             'A blended playlist'
         );
         expect(mocks.refreshToken).not.toHaveBeenCalled();
+    });
+
+    it('reports invalid members using their internal user IDs', async () => {
+        const invalidMember = {
+            ...member,
+            id: 2,
+            spotify_id: 'member-spotify-id',
+            display_name: 'Member needing login',
+            token_status: 'invalid',
+        };
+        mocks.query
+            .mockResolvedValueOnce({ rows: [playlist(null)] })
+            .mockResolvedValueOnce({ rows: [member, invalidMember] })
+            .mockResolvedValueOnce({ rows: [{ spotify_id: 'owner-spotify-id', access_token: 'owner-access-token' }] })
+            .mockResolvedValue({ rows: [] });
+        mocks.createPlaylist.mockResolvedValue({
+            id: 'new-spotify-playlist',
+            external_urls: { spotify: 'https://open.spotify.com/playlist/new-spotify-playlist' },
+        });
+
+        await expect(generatePlaylist(12, { sortMode: 'shuffle' })).resolves.toMatchObject({
+            ok: true,
+            skippedMembers: [{ id: 2, displayName: 'Member needing login', reason: 'token-invalid' }],
+        });
+        expect(mocks.getTopTracks).toHaveBeenCalledTimes(1);
+    });
+
+    it('includes skipped members in an unsuccessful generate response', async () => {
+        const invalidOwner = {
+            ...member,
+            display_name: 'Owner needing login',
+            token_status: 'invalid',
+        };
+        mocks.query
+            .mockResolvedValueOnce({ rows: [playlist(null)] })
+            .mockResolvedValueOnce({ rows: [playlist(null)] })
+            .mockResolvedValueOnce({ rows: [invalidOwner] });
+
+        await expect(postGenerate()).resolves.toEqual({
+            status: 400,
+            body: {
+                error: 'Could not get tracks from any member',
+                skippedMembers: [{ id: 1, displayName: 'Owner needing login', reason: 'token-invalid' }],
+            },
+        });
+    });
+
+    it('reports members with no usable tracks', async () => {
+        const noTracksMember = {
+            ...member,
+            id: 2,
+            spotify_id: 'member-spotify-id',
+            display_name: 'Member without tracks',
+        };
+        mocks.query
+            .mockResolvedValueOnce({ rows: [playlist(null)] })
+            .mockResolvedValueOnce({ rows: [member, noTracksMember] })
+            .mockResolvedValueOnce({ rows: [{ spotify_id: 'owner-spotify-id', access_token: 'owner-access-token' }] })
+            .mockResolvedValue({ rows: [] });
+        mocks.filterTracks
+            .mockReturnValueOnce({ tracks: [track], filteredByDuration: 0, filteredByName: 0 })
+            .mockReturnValueOnce({ tracks: [], filteredByDuration: 0, filteredByName: 0 });
+        mocks.createPlaylist.mockResolvedValue({
+            id: 'new-spotify-playlist',
+            external_urls: { spotify: 'https://open.spotify.com/playlist/new-spotify-playlist' },
+        });
+
+        await expect(generatePlaylist(12, { sortMode: 'shuffle' })).resolves.toMatchObject({
+            ok: true,
+            skippedMembers: [{ id: 2, displayName: 'Member without tracks', reason: 'no-tracks' }],
+        });
+    });
+
+    it('reports members whose top tracks could not be fetched', async () => {
+        const failedMember = {
+            ...member,
+            id: 2,
+            spotify_id: 'member-spotify-id',
+            display_name: 'Member with unavailable tracks',
+        };
+        mocks.query
+            .mockResolvedValueOnce({ rows: [playlist('existing-spotify-playlist')] })
+            .mockResolvedValueOnce({ rows: [member, failedMember] })
+            .mockResolvedValueOnce({ rows: [{ spotify_id: 'owner-spotify-id', access_token: 'owner-access-token' }] });
+        mocks.getTopTracks
+            .mockResolvedValueOnce([track])
+            .mockRejectedValueOnce(new Error('Spotify unavailable'));
+
+        await expect(generatePlaylist(12, { sortMode: 'shuffle' })).resolves.toMatchObject({
+            ok: true,
+            skippedMembers: [{ id: 2, displayName: 'Member with unavailable tracks', reason: 'no-tracks' }],
+        });
+    });
+
+    it('reports temporary token refresh failures without invalidating the member', async () => {
+        const temporarilyUnavailableMember = {
+            ...member,
+            id: 2,
+            spotify_id: 'member-spotify-id',
+            display_name: 'Member with temporary token failure',
+            token_expires_at: new Date(0),
+            token_status: 'active',
+        };
+        mocks.query
+            .mockResolvedValueOnce({ rows: [playlist('existing-spotify-playlist')] })
+            .mockResolvedValueOnce({ rows: [member, temporarilyUnavailableMember] })
+            .mockResolvedValueOnce({ rows: [{ spotify_id: 'owner-spotify-id', access_token: 'owner-access-token' }] });
+        mocks.refreshToken.mockRejectedValueOnce(new Error('timeout'));
+
+        await expect(generatePlaylist(12, { sortMode: 'shuffle' })).resolves.toMatchObject({
+            ok: true,
+            skippedMembers: [{ id: 2, displayName: 'Member with temporary token failure', reason: 'no-tracks' }],
+        });
+        expect(mocks.isRefreshTokenPermanentlyInvalid).toHaveBeenCalledOnce();
+        expect(mocks.query.mock.calls.some(([sql]) => (
+            typeof sql === 'string' && sql.includes("SET token_status = 'invalid'")
+        ))).toBe(false);
     });
 
     it('throws a descriptive error when the playlist does not exist', async () => {
@@ -281,6 +404,7 @@ describe('generatePlaylist', () => {
         await expect(generatePlaylist(12, { sortMode: 'shuffle' })).resolves.toEqual({
             ok: false,
             reason: 'no-members',
+            skippedMembers: [],
         });
     });
 
@@ -292,6 +416,7 @@ describe('generatePlaylist', () => {
         await expect(generatePlaylist(12, { sortMode: 'shuffle' })).resolves.toEqual({
             ok: false,
             reason: 'no-tokens',
+            skippedMembers: [{ id: 1, displayName: 'Owner', reason: 'no-tracks' }],
         });
     });
 
@@ -304,6 +429,7 @@ describe('generatePlaylist', () => {
         await expect(generatePlaylist(12, { sortMode: 'shuffle' })).resolves.toEqual({
             ok: false,
             reason: 'no-tracks',
+            skippedMembers: [],
         });
     });
 
