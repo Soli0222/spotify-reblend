@@ -65,9 +65,11 @@ export async function generatePlaylist(
             },
         });
         if (!accessToken) {
-            if (tokenInvalid) {
-                skippedMembers.push({ id: member.id, displayName: member.display_name, reason: 'token-invalid' });
-            }
+            skippedMembers.push({
+                id: member.id,
+                displayName: member.display_name,
+                reason: tokenInvalid ? 'token-invalid' : 'no-tracks',
+            });
             continue;
         }
 
@@ -99,6 +101,7 @@ export async function generatePlaylist(
             userTracks.set(member.spotify_id, tracks);
         } catch (error) {
             logger.error({ err: error, memberId: member.id }, 'Failed to get top tracks');
+            skippedMembers.push({ id: member.id, displayName: member.display_name, reason: 'no-tracks' });
         }
     }
 
