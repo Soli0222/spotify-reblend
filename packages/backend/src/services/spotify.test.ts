@@ -1,3 +1,4 @@
+import axios from 'axios';
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import {
     INSTRUMENTAL_TRACK_NAME_PATTERNS,
@@ -32,12 +33,26 @@ const originalMinTrackDurationMs = process.env.MIN_TRACK_DURATION_MS;
 
 afterEach(() => {
     mocks.loggerDebug.mockClear();
-
+    vi.restoreAllMocks();
     if (originalMinTrackDurationMs === undefined) {
         delete process.env.MIN_TRACK_DURATION_MS;
     } else {
         process.env.MIN_TRACK_DURATION_MS = originalMinTrackDurationMs;
     }
+});
+
+describe('Spotify API rate limits', () => {
+    it('retries once after the Retry-After delay', async () => {
+        const get = vi.spyOn(axios, 'get')
+            .mockRejectedValueOnce({
+                isAxiosError: true,
+                response: { status: 429, headers: { 'retry-after': '0' } },
+            })
+            .mockResolvedValueOnce({ data: { items: [] } });
+
+        await expect(spotifyService.getTopTracks('access-token')).resolves.toEqual([]);
+        expect(get).toHaveBeenCalledTimes(2);
+    });
 });
 
 describe('filterInstrumentalTracks', () => {

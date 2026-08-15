@@ -51,6 +51,13 @@ config:
   # The existing secret must have keys: SPOTIFY_CLIENT_ID, SPOTIFY_CLIENT_SECRET, AUTH_SECRET, TOKEN_ENCRYPTION_KEY.
   existingSecret: ""
 
+# Daily automatic playlist update scheduler. Disabled unless explicitly enabled.
+autoUpdate:
+  enabled: false
+  cron: "0 5 * * *"
+  timezone: "Asia/Tokyo"
+  concurrency: 1
+
 # Metrics configuration
 metrics:
   enabled: true

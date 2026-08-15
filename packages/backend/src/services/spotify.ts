@@ -40,6 +40,33 @@ export interface TrackFilterResult {
 
 const DEFAULT_MIN_TRACK_DURATION_MS = 90000;
 
+function sleep(ms: number): Promise<void> {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function retryAfterMs(error: unknown): number | null {
+    if (!axios.isAxiosError(error) || error.response?.status !== 429) {
+        return null;
+    }
+
+    const retryAfter = error.response.headers?.['retry-after'];
+    const seconds = Number(retryAfter);
+    return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
+}
+
+async function retryOnRateLimit<T>(request: () => Promise<T>): Promise<T> {
+    try {
+        return await request();
+    } catch (error) {
+        const delayMs = retryAfterMs(error);
+        if (delayMs === null) {
+            throw error;
+        }
+        await sleep(delayMs);
+        return request();
+    }
+}
+
 export function isRefreshTokenPermanentlyInvalid(error: unknown): boolean {
     if (!axios.isAxiosError(error) || error.response?.status !== 400) {
         return false;
@@ -149,20 +176,20 @@ export class SpotifyService {
     }
 
     async getCurrentUser(accessToken: string): Promise<SpotifyUser> {
-        const response = await axios.get(`${SPOTIFY_API_BASE}/me`, {
+        const response = await retryOnRateLimit(() => axios.get(`${SPOTIFY_API_BASE}/me`, {
             headers: { Authorization: `Bearer ${accessToken}` },
-        });
+        }));
         return response.data;
     }
 
     async getTopTracks(accessToken: string, limit: number = 50): Promise<SpotifyTrack[]> {
-        const response = await axios.get(`${SPOTIFY_API_BASE}/me/top/tracks`, {
+        const response = await retryOnRateLimit(() => axios.get(`${SPOTIFY_API_BASE}/me/top/tracks`, {
             headers: { Authorization: `Bearer ${accessToken}` },
             params: {
                 time_range: 'short_term', // Last 4 weeks (1 month)
                 limit,
             },
-        });
+        }));
         return response.data.items;
     }
 
@@ -225,7 +252,7 @@ export class SpotifyService {
         name: string,
         description: string
     ): Promise<{ id: string; external_urls: { spotify: string } }> {
-        const response = await axios.post(
+        const response = await retryOnRateLimit(() => axios.post(
             `${SPOTIFY_API_BASE}/users/${userId}/playlists`,
             {
                 name,
@@ -239,7 +266,7 @@ export class SpotifyService {
                     'Content-Type': 'application/json',
                 },
             }
-        );
+        ));
         return response.data;
     }
 
@@ -251,7 +278,7 @@ export class SpotifyService {
         // Spotify allows max 100 tracks per request
         for (let i = 0; i < trackUris.length; i += 100) {
             const batch = trackUris.slice(i, i + 100);
-            await axios.post(
+            await retryOnRateLimit(() => axios.post(
                 `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`,
                 { uris: batch },
                 {
@@ -260,16 +287,16 @@ export class SpotifyService {
                         'Content-Type': 'application/json',
                     },
                 }
-            );
+            ));
         }
     }
 
     async clearPlaylistTracks(accessToken: string, playlistId: string): Promise<void> {
         // Get current tracks
-        const response = await axios.get(`${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`, {
+        const response = await retryOnRateLimit(() => axios.get(`${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`, {
             headers: { Authorization: `Bearer ${accessToken}` },
             params: { fields: 'items(track(uri))' },
-        });
+        }));
 
         const trackUris = response.data.items
             .filter((item: { track: { uri: string } | null }) => item.track)
@@ -279,13 +306,13 @@ export class SpotifyService {
             // Remove in batches of 100
             for (let i = 0; i < trackUris.length; i += 100) {
                 const batch = trackUris.slice(i, i + 100);
-                await axios.delete(`${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`, {
+                await retryOnRateLimit(() => axios.delete(`${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`, {
                     headers: {
                         Authorization: `Bearer ${accessToken}`,
                         'Content-Type': 'application/json',
                     },
                     data: { tracks: batch },
-                });
+                }));
             }
         }
     }
@@ -295,10 +322,10 @@ export class SpotifyService {
         let url: string | null = `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`;
 
         while (url) {
-            const response: { data: { items: { track: SpotifyTrack | null }[]; next: string | null } } = await axios.get(url, {
+            const response: { data: { items: { track: SpotifyTrack | null }[]; next: string | null } } = await retryOnRateLimit(() => axios.get(url!, {
                 headers: { Authorization: `Bearer ${accessToken}` },
                 params: { fields: 'items(track(id,uri,name,artists(name),album(name,images))),next' },
-            });
+            }));
 
             for (const item of response.data.items) {
                 if (item.track) {
@@ -313,7 +340,7 @@ export class SpotifyService {
     }
 
     async followPlaylist(accessToken: string, playlistId: string): Promise<void> {
-        await axios.put(
+        await retryOnRateLimit(() => axios.put(
             `${SPOTIFY_API_BASE}/playlists/${playlistId}/followers`,
             { public: false },
             {
@@ -322,18 +349,18 @@ export class SpotifyService {
                     'Content-Type': 'application/json',
                 },
             }
-        );
+        ));
     }
 
     async unfollowPlaylist(accessToken: string, playlistId: string): Promise<void> {
-        await axios.delete(
+        await retryOnRateLimit(() => axios.delete(
             `${SPOTIFY_API_BASE}/playlists/${playlistId}/followers`,
             {
                 headers: {
                     Authorization: `Bearer ${accessToken}`,
                 },
             }
-        );
+        ));
     }
 }
 

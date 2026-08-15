@@ -6,6 +6,7 @@ import path from 'path';
 import dotenv from 'dotenv';
 import { initDatabase, pool } from './config/database';
 import { refreshTokenInvalidUsersGauge } from './services/spotify-token';
+import { startAutoUpdateScheduler } from './services/auto-update-scheduler';
 import { logger, requestLogger } from './utils/logger';
 import { startMetricsServer, metrics } from './utils/metrics';
 import { blockSensitivePaths, createCorsMiddleware, rateLimit, securityHeaders } from './utils/http';
@@ -22,6 +23,7 @@ const METRICS_PORT = parseInt(process.env.METRICS_PORT || '9464', 10);
 const SHUTDOWN_TIMEOUT_MS = 10_000;
 let server: Server | undefined;
 let metricsServer: Server | undefined;
+let autoUpdateScheduler: ReturnType<typeof startAutoUpdateScheduler>;
 let isShuttingDown = false;
 
 // Middleware
@@ -109,6 +111,7 @@ async function start() {
     try {
         await initDatabase();
         await refreshTokenInvalidUsersGauge();
+        autoUpdateScheduler = startAutoUpdateScheduler();
 
         // Start Metrics Server
         metricsServer = startMetricsServer(METRICS_PORT);
@@ -155,6 +158,7 @@ async function shutdown(signal: NodeJS.Signals) {
 
     try {
         const closeServers = Promise.all([closeServer(server), closeServer(metricsServer)]);
+        autoUpdateScheduler?.stop();
         server?.closeIdleConnections();
         metricsServer?.closeIdleConnections();
         await closeServers;
