@@ -18,6 +18,7 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 const METRICS_PORT = parseInt(process.env.METRICS_PORT || '9464', 10);
+const SHUTDOWN_TIMEOUT_MS = 10_000;
 let server: Server | undefined;
 let metricsServer: Server | undefined;
 let isShuttingDown = false;
@@ -143,12 +144,24 @@ async function shutdown(signal: NodeJS.Signals) {
     isShuttingDown = true;
     logger.info({ signal }, 'Shutting down gracefully');
 
+    const forceShutdownTimer = setTimeout(() => {
+        logger.warn({ timeoutMs: SHUTDOWN_TIMEOUT_MS }, 'Graceful shutdown timed out, forcing exit');
+        server?.closeAllConnections();
+        metricsServer?.closeAllConnections();
+        process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+
     try {
-        await Promise.all([closeServer(server), closeServer(metricsServer)]);
+        const closeServers = Promise.all([closeServer(server), closeServer(metricsServer)]);
+        server?.closeIdleConnections();
+        metricsServer?.closeIdleConnections();
+        await closeServers;
         await pool.end();
         await shutdownTelemetry();
+        clearTimeout(forceShutdownTimer);
         process.exit(0);
     } catch (error) {
+        clearTimeout(forceShutdownTimer);
         logger.error({ err: error }, 'Graceful shutdown failed');
         process.exit(1);
     }
