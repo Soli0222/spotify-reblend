@@ -5,6 +5,7 @@ import { SortMode } from './blend';
 import { generatePlaylist } from './playlist-generation';
 import { logger } from '../utils/logger';
 import { metrics } from '../utils/metrics';
+import { recordSpanError, withSpan } from '../utils/tracing';
 
 const DEFAULT_CRON = '0 5 * * *';
 const DEFAULT_TIMEZONE = 'Asia/Tokyo';
@@ -98,53 +99,58 @@ async function recordResult(
 }
 
 async function updatePlaylist(jobId: string, playlist: AutoUpdatePlaylist): Promise<void> {
-    const startedAt = Date.now();
-    let trackCount = 0;
+    return withSpan('auto_update.playlist', { 'playlist.id': playlist.id }, async () => {
+        const startedAt = Date.now();
+        let trackCount = 0;
 
-    try {
-        const outcome = await generatePlaylist(playlist.id, { sortMode: sortModeFor(playlist) });
-        if (!outcome.ok) {
-            await recordResult(playlist.id, 'failed', `Generation could not complete: ${outcome.reason}`);
-            metrics.autoUpdateRuns.inc({ result: 'failed' });
-            logger.warn({ jobId, playlistId: playlist.id, trackCount, durationMs: Date.now() - startedAt }, 'Automatic playlist update failed');
-            return;
-        }
-
-        trackCount = outcome.trackCount;
-        const status = outcome.skippedMembers.length > 0 ? 'partial' : 'success';
-        const error = status === 'partial' ? `Skipped ${outcome.skippedMembers.length} member(s)` : null;
-        await recordResult(playlist.id, status, error);
-        metrics.autoUpdateRuns.inc({ result: status });
-        if (status === 'success') {
-            metrics.autoUpdateLastSuccessTimestamp.set(Date.now() / 1000);
-        }
-        logger.info({ jobId, playlistId: playlist.id, trackCount, durationMs: Date.now() - startedAt }, 'Automatic playlist update completed');
-    } catch (error) {
         try {
-            await recordResult(playlist.id, 'failed', 'Automatic update failed');
-        } catch (recordError) {
-            logger.error({ err: recordError, jobId, playlistId: playlist.id }, 'Failed to record automatic update result');
+            const outcome = await generatePlaylist(playlist.id, { sortMode: sortModeFor(playlist) });
+            if (!outcome.ok) {
+                await recordResult(playlist.id, 'failed', `Generation could not complete: ${outcome.reason}`);
+                metrics.autoUpdateRuns.inc({ result: 'failed' });
+                logger.warn({ jobId, playlistId: playlist.id, trackCount, durationMs: Date.now() - startedAt }, 'Automatic playlist update failed');
+                return;
+            }
+
+            trackCount = outcome.trackCount;
+            const status = outcome.skippedMembers.length > 0 ? 'partial' : 'success';
+            const error = status === 'partial' ? `Skipped ${outcome.skippedMembers.length} member(s)` : null;
+            await recordResult(playlist.id, status, error);
+            metrics.autoUpdateRuns.inc({ result: status });
+            if (status === 'success') {
+                metrics.autoUpdateLastSuccessTimestamp.set(Date.now() / 1000);
+            }
+            logger.info({ jobId, playlistId: playlist.id, trackCount, durationMs: Date.now() - startedAt }, 'Automatic playlist update completed');
+        } catch (error) {
+            recordSpanError(error);
+            try {
+                await recordResult(playlist.id, 'failed', 'Automatic update failed');
+            } catch (recordError) {
+                recordSpanError(recordError);
+                logger.error({ err: recordError, jobId, playlistId: playlist.id }, 'Failed to record automatic update result');
+            }
+            metrics.autoUpdateRuns.inc({ result: 'failed' });
+            logger.error({ err: error, jobId, playlistId: playlist.id, trackCount, durationMs: Date.now() - startedAt }, 'Automatic playlist update failed');
+        } finally {
+            metrics.autoUpdateDuration.observe((Date.now() - startedAt) / 1000);
         }
-        metrics.autoUpdateRuns.inc({ result: 'failed' });
-        logger.error({ err: error, jobId, playlistId: playlist.id, trackCount, durationMs: Date.now() - startedAt }, 'Automatic playlist update failed');
-    } finally {
-        metrics.autoUpdateDuration.observe((Date.now() - startedAt) / 1000);
-    }
+    });
 }
 
 export async function runAutoUpdateJob(config: AutoUpdateConfig = getAutoUpdateConfig()): Promise<void> {
-    const jobId = randomUUID();
-    const lockClient = await pool.connect();
-    let lockAcquired = false;
+    return withSpan('auto_update.run', { 'job.playlist_count': 0 }, async span => {
+        const jobId = randomUUID();
+        const lockClient = await pool.connect();
+        let lockAcquired = false;
 
-    try {
-        const lockResult = await lockClient.query('SELECT pg_try_advisory_lock($1) AS locked', [AUTO_UPDATE_LOCK_KEY]);
-        lockAcquired = lockResult.rows[0]?.locked === true;
-        if (!lockAcquired) {
-            metrics.autoUpdateRuns.inc({ result: 'skipped' });
-            logger.debug({ jobId }, 'Automatic update job skipped because another instance holds the lock');
-            return;
-        }
+        try {
+            const lockResult = await lockClient.query('SELECT pg_try_advisory_lock($1) AS locked', [AUTO_UPDATE_LOCK_KEY]);
+            lockAcquired = lockResult.rows[0]?.locked === true;
+            if (!lockAcquired) {
+                metrics.autoUpdateRuns.inc({ result: 'skipped' });
+                logger.debug({ jobId }, 'Automatic update job skipped because another instance holds the lock');
+                return;
+            }
 
         const playlistsResult = await lockClient.query<AutoUpdatePlaylist>(
             `SELECT id, auto_update_sort_mode
@@ -153,36 +159,39 @@ export async function runAutoUpdateJob(config: AutoUpdateConfig = getAutoUpdateC
                AND spotify_playlist_id IS NOT NULL
              ORDER BY id ASC`
         );
-        const playlists = playlistsResult.rows;
-        if (playlists.length === 0) {
-            metrics.autoUpdateRuns.inc({ result: 'skipped' });
-            logger.info({ jobId }, 'No playlists are eligible for automatic update');
-            return;
-        }
+            const playlists = playlistsResult.rows;
+            span?.setAttribute('job.playlist_count', playlists.length);
+            if (playlists.length === 0) {
+                metrics.autoUpdateRuns.inc({ result: 'skipped' });
+                logger.info({ jobId }, 'No playlists are eligible for automatic update');
+                return;
+            }
 
-        let nextIndex = 0;
-        const worker = async () => {
-            let hasProcessedPlaylist = false;
-            while (nextIndex < playlists.length) {
-                const playlist = playlists[nextIndex++];
-                if (hasProcessedPlaylist) {
-                    await sleep(PLAYLIST_DELAY_MS);
+            let nextIndex = 0;
+            const worker = async () => {
+                let hasProcessedPlaylist = false;
+                while (nextIndex < playlists.length) {
+                    const playlist = playlists[nextIndex++];
+                    if (hasProcessedPlaylist) {
+                        await sleep(PLAYLIST_DELAY_MS);
+                    }
+                    hasProcessedPlaylist = true;
+                    await updatePlaylist(jobId, playlist);
                 }
-                hasProcessedPlaylist = true;
-                await updatePlaylist(jobId, playlist);
+            };
+            await Promise.all(Array.from({ length: Math.min(config.concurrency, playlists.length) }, worker));
+        } finally {
+            if (lockAcquired) {
+                try {
+                    await lockClient.query('SELECT pg_advisory_unlock($1)', [AUTO_UPDATE_LOCK_KEY]);
+                } catch (error) {
+                    recordSpanError(error);
+                    logger.error({ err: error, jobId }, 'Failed to release automatic update advisory lock');
+                }
             }
-        };
-        await Promise.all(Array.from({ length: Math.min(config.concurrency, playlists.length) }, worker));
-    } finally {
-        if (lockAcquired) {
-            try {
-                await lockClient.query('SELECT pg_advisory_unlock($1)', [AUTO_UPDATE_LOCK_KEY]);
-            } catch (error) {
-                logger.error({ err: error, jobId }, 'Failed to release automatic update advisory lock');
-            }
+            lockClient.release();
         }
-        lockClient.release();
-    }
+    });
 }
 
 export function startAutoUpdateScheduler(): ScheduledTask | undefined {

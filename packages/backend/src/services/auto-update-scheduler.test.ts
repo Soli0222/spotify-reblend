@@ -1,4 +1,5 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { NodeSDK, tracing } from '@opentelemetry/sdk-node';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
     connect: vi.fn(),
@@ -54,6 +55,9 @@ vi.mock('node-cron', () => ({
 
 import { getAutoUpdateConfig, runAutoUpdateJob, startAutoUpdateScheduler } from './auto-update-scheduler';
 
+const exporter = new tracing.InMemorySpanExporter();
+let telemetry: NodeSDK;
+
 const enabledConfig = {
     enabled: true,
     cronExpression: '0 5 * * *',
@@ -74,9 +78,27 @@ function successfulOutcome(skippedMembers: unknown[] = []) {
 }
 
 describe('automatic update scheduler', () => {
+    beforeAll(() => {
+        vi.stubEnv('OTEL_SDK_DISABLED', 'false');
+        vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318');
+        telemetry = new NodeSDK({
+            instrumentations: [],
+            spanProcessors: [new tracing.SimpleSpanProcessor(exporter)],
+        });
+        telemetry.start();
+    });
+
+    afterAll(async () => {
+        await telemetry.shutdown();
+        vi.unstubAllEnvs();
+    });
+
     beforeEach(() => {
+        exporter.reset();
         vi.clearAllMocks();
         vi.stubEnv('AUTO_UPDATE_ENABLED', 'false');
+        vi.stubEnv('OTEL_SDK_DISABLED', 'false');
+        vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318');
         mocks.cronValidate.mockReturnValue(true);
         mocks.connect.mockResolvedValue({ query: mocks.lockQuery, release: mocks.release });
         mocks.poolQuery.mockResolvedValue({ rows: [] });
@@ -187,5 +209,23 @@ describe('automatic update scheduler', () => {
         expect(mocks.lockQuery).toHaveBeenCalledTimes(1);
         expect(mocks.autoUpdateRuns).toHaveBeenCalledWith({ result: 'skipped' });
         expect(mocks.release).toHaveBeenCalledOnce();
+    });
+
+    it('records each scheduled playlist below an independent job root span', async () => {
+        mocks.lockQuery
+            .mockResolvedValueOnce({ rows: [{ locked: true }] })
+            .mockResolvedValueOnce({ rows: [{ id: 1, auto_update_sort_mode: 'shuffle' }] });
+        mocks.generatePlaylist.mockResolvedValueOnce(successfulOutcome());
+
+        await runAutoUpdateJob(enabledConfig);
+
+        await new Promise(resolve => setTimeout(resolve, 50));
+        const spans = exporter.getFinishedSpans();
+        const runSpan = spans.find(span => span.name === 'auto_update.run');
+        const playlistSpan = spans.find(span => span.name === 'auto_update.playlist');
+        expect(runSpan?.parentSpanContext).toBeUndefined();
+        expect(runSpan?.attributes).toMatchObject({ 'job.playlist_count': 1 });
+        expect(playlistSpan?.attributes).toMatchObject({ 'playlist.id': 1 });
+        expect(playlistSpan?.parentSpanContext?.spanId).toBe(runSpan?.spanContext().spanId);
     });
 });

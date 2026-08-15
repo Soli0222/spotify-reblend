@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
+import { recordSpanError, withSpan } from '../utils/tracing';
 
 const RECCOBEATS_API_BASE = 'https://api.reccobeats.com/v1';
 
@@ -58,6 +59,7 @@ class ReccoBeatsService {
             }
             return null;
         } catch (error) {
+            recordSpanError(error);
             logger.debug({ isrc, err: error }, 'Failed to get ReccoBeats track');
             return null;
         }
@@ -71,6 +73,7 @@ class ReccoBeatsService {
             const response = await this.client.get<AudioFeatures>(`/track/${reccobeatsId}/audio-features`);
             return response.data;
         } catch (error) {
+            recordSpanError(error);
             logger.debug({ reccobeatsId, err: error }, 'Failed to get audio features');
             return null;
         }
@@ -83,45 +86,49 @@ class ReccoBeatsService {
     async getAudioFeaturesForTracks(
         tracks: Array<{ spotifyId: string; isrc: string | undefined }>
     ): Promise<Map<string, AudioFeatures>> {
-        const featuresMap = new Map<string, AudioFeatures>();
-        
-        // Process in batches to avoid rate limiting
-        const batchSize = 10;
-        const delayMs = 100;
-
-        for (let i = 0; i < tracks.length; i += batchSize) {
-            const batch = tracks.slice(i, i + batchSize);
+        return withSpan('reccobeats.audio_features', { 'reccobeats.requested': tracks.length }, async span => {
+            const featuresMap = new Map<string, AudioFeatures>();
             
-            const promises = batch.map(async (track) => {
-                if (!track.isrc) return null;
+            // Process in batches to avoid rate limiting
+            const batchSize = 10;
+            const delayMs = 100;
 
-                try {
-                    // First get the ReccoBeats track ID
-                    const reccoTrack = await this.getTrackByIsrc(track.isrc);
-                    if (!reccoTrack) return null;
+            for (let i = 0; i < tracks.length; i += batchSize) {
+                const batch = tracks.slice(i, i + batchSize);
 
-                    // Then get audio features
-                    const features = await this.getAudioFeatures(reccoTrack.id);
-                    if (features) {
-                        featuresMap.set(track.spotifyId, features);
+                const promises = batch.map(async (track) => {
+                    if (!track.isrc) return null;
+
+                    try {
+                        // First get the ReccoBeats track ID
+                        const reccoTrack = await this.getTrackByIsrc(track.isrc);
+                        if (!reccoTrack) return null;
+
+                        // Then get audio features
+                        const features = await this.getAudioFeatures(reccoTrack.id);
+                        if (features) {
+                            featuresMap.set(track.spotifyId, features);
+                        }
+                        return features;
+                    } catch (error) {
+                        recordSpanError(error);
+                        logger.debug({ spotifyId: track.spotifyId, isrc: track.isrc }, 'Failed to get features for track');
+                        return null;
                     }
-                    return features;
-                } catch (error) {
-                    logger.debug({ spotifyId: track.spotifyId, isrc: track.isrc }, 'Failed to get features for track');
-                    return null;
+                });
+
+                await Promise.all(promises);
+
+                // Add delay between batches to avoid rate limiting
+                if (i + batchSize < tracks.length) {
+                    await new Promise(resolve => setTimeout(resolve, delayMs));
                 }
-            });
-
-            await Promise.all(promises);
-
-            // Add delay between batches to avoid rate limiting
-            if (i + batchSize < tracks.length) {
-                await new Promise(resolve => setTimeout(resolve, delayMs));
             }
-        }
 
-        logger.info({ totalTracks: tracks.length, featuresFound: featuresMap.size }, 'Fetched audio features');
-        return featuresMap;
+            span?.setAttribute('reccobeats.resolved', featuresMap.size);
+            logger.info({ totalTracks: tracks.length, featuresFound: featuresMap.size }, 'Fetched audio features');
+            return featuresMap;
+        });
     }
 }
 
