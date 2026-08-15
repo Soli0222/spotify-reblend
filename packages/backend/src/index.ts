@@ -1,10 +1,14 @@
+import './telemetry';
+
 import express from 'express';
+import { Server } from 'http';
 import path from 'path';
 import dotenv from 'dotenv';
-import { initDatabase } from './config/database';
+import { initDatabase, pool } from './config/database';
 import { logger, requestLogger } from './utils/logger';
 import { startMetricsServer, metrics } from './utils/metrics';
 import { blockSensitivePaths, createCorsMiddleware, rateLimit, securityHeaders } from './utils/http';
+import { shutdownTelemetry } from './telemetry';
 import authRoutes from './routes/auth';
 import playlistRoutes from './routes/playlists';
 import invitationRoutes from './routes/invitations';
@@ -14,6 +18,10 @@ dotenv.config();
 const app = express();
 const PORT = process.env.PORT || 3000;
 const METRICS_PORT = parseInt(process.env.METRICS_PORT || '9464', 10);
+const SHUTDOWN_TIMEOUT_MS = 10_000;
+let server: Server | undefined;
+let metricsServer: Server | undefined;
+let isShuttingDown = false;
 
 // Middleware
 app.use((req, res, next) => {
@@ -101,9 +109,9 @@ async function start() {
         await initDatabase();
 
         // Start Metrics Server
-        startMetricsServer(METRICS_PORT);
+        metricsServer = startMetricsServer(METRICS_PORT);
 
-        app.listen(PORT, () => {
+        server = app.listen(PORT, () => {
             logger.info({ port: PORT, env: process.env.NODE_ENV }, 'Server running');
         });
     } catch (error) {
@@ -111,5 +119,60 @@ async function start() {
         process.exit(1);
     }
 }
+
+function closeServer(serverToClose: Server | undefined): Promise<void> {
+    if (!serverToClose) {
+        return Promise.resolve();
+    }
+
+    return new Promise((resolve, reject) => {
+        serverToClose.close(error => {
+            if (error) {
+                reject(error);
+                return;
+            }
+            resolve();
+        });
+    });
+}
+
+async function shutdown(signal: NodeJS.Signals) {
+    if (isShuttingDown) {
+        return;
+    }
+
+    isShuttingDown = true;
+    logger.info({ signal }, 'Shutting down gracefully');
+
+    const forceShutdownTimer = setTimeout(() => {
+        logger.warn({ timeoutMs: SHUTDOWN_TIMEOUT_MS }, 'Graceful shutdown timed out, forcing exit');
+        server?.closeAllConnections();
+        metricsServer?.closeAllConnections();
+        process.exit(1);
+    }, SHUTDOWN_TIMEOUT_MS);
+
+    try {
+        const closeServers = Promise.all([closeServer(server), closeServer(metricsServer)]);
+        server?.closeIdleConnections();
+        metricsServer?.closeIdleConnections();
+        await closeServers;
+        await pool.end();
+        await shutdownTelemetry();
+        clearTimeout(forceShutdownTimer);
+        process.exit(0);
+    } catch (error) {
+        clearTimeout(forceShutdownTimer);
+        logger.error({ err: error }, 'Graceful shutdown failed');
+        process.exit(1);
+    }
+}
+
+process.once('SIGTERM', () => {
+    void shutdown('SIGTERM');
+});
+
+process.once('SIGINT', () => {
+    void shutdown('SIGINT');
+});
 
 start();

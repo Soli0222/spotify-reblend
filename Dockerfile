@@ -58,4 +58,4 @@ HEALTHCHECK --interval=30s --timeout=3s --start-period=5s --retries=3 \
 USER node
 
 # Start the application
-CMD ["node", "packages/backend/dist/index.js"]
+CMD ["node", "--require", "./packages/backend/dist/telemetry.js", "./packages/backend/dist/index.js"]

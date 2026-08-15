@@ -58,6 +58,14 @@ metrics:
     scrapeTimeout: 10s
     labels: {}
 
+# OpenTelemetry tracing configuration. Tracing is disabled unless enabled is true.
+otel:
+  enabled: false
+  endpoint: ""
+  serviceName: "spotify-reblend-backend"
+  tracesSampler: "parentbased_traceidratio"
+  tracesSamplerArg: "0.1"
+
 # Ingress configuration
 ingress:
   enabled: false
