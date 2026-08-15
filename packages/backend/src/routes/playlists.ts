@@ -74,7 +74,8 @@ router.get('/', async (req: Request, res: Response) => {
 
         const result = await pool.query(
             `SELECT DISTINCT p.id, p.name, p.description, p.owner_id, p.spotify_playlist_id, 
-              p.status, p.created_at, u.display_name as owner_name,
+              p.status, p.auto_update_enabled, p.auto_update_sort_mode,
+              p.last_auto_updated_at, p.last_auto_update_status, p.created_at, u.display_name as owner_name,
               pm.role
        FROM playlists p
        JOIN playlist_members pm ON p.id = pm.playlist_id
@@ -92,6 +93,10 @@ router.get('/', async (req: Request, res: Response) => {
             ownerName: p.owner_name,
             spotifyPlaylistId: p.spotify_playlist_id,
             status: p.status,
+            autoUpdateEnabled: p.auto_update_enabled,
+            autoUpdateSortMode: p.auto_update_sort_mode,
+            lastAutoUpdatedAt: p.last_auto_updated_at,
+            lastAutoUpdateStatus: p.last_auto_update_status,
             role: p.role,
             createdAt: p.created_at,
         })));
@@ -158,6 +163,10 @@ router.get('/:id', async (req: Request, res: Response) => {
             ownerName: playlist.owner_name,
             spotifyPlaylistId: playlist.spotify_playlist_id,
             status: playlist.status,
+            autoUpdateEnabled: playlist.auto_update_enabled,
+            autoUpdateSortMode: playlist.auto_update_sort_mode,
+            lastAutoUpdatedAt: playlist.last_auto_updated_at,
+            lastAutoUpdateStatus: playlist.last_auto_update_status,
             createdAt: playlist.created_at,
             userRole: memberCheck.rows[0].role,
             members: membersResult.rows.map(m => ({
@@ -242,6 +251,58 @@ router.get('/:id/tracks', async (req: Request, res: Response) => {
     } catch (error) {
         logger.error({ err: error, playlistId: req.params.id }, 'Get playlist tracks error');
         res.status(500).json({ error: 'Failed to get playlist tracks' });
+    }
+});
+
+// Enable or disable daily automatic updates for a generated playlist
+router.patch('/:id/auto-update', async (req: Request, res: Response) => {
+    try {
+        const userId = req.authUser!.id;
+        const { id } = req.params;
+        const { enabled, sortMode } = (req.body ?? {}) as { enabled?: unknown; sortMode?: unknown };
+
+        if (typeof enabled !== 'boolean') {
+            return res.status(400).json({ error: 'Auto update enabled must be a boolean' });
+        }
+        if (sortMode !== undefined && sortMode !== 'shuffle' && sortMode !== 'smart') {
+            return res.status(400).json({ error: 'Invalid sort mode' });
+        }
+
+        // Check if user is owner
+        const playlistResult = await pool.query(
+            'SELECT * FROM playlists WHERE id = $1 AND owner_id = $2',
+            [id, userId]
+        );
+
+        if (playlistResult.rows.length === 0) {
+            return res.status(403).json({ error: 'Only the owner can update automatic updates' });
+        }
+
+        const playlist = playlistResult.rows[0];
+        if (enabled && playlist.status !== 'generated') {
+            return res.status(400).json({ error: 'Playlist must be generated before enabling automatic updates' });
+        }
+
+        const updatedResult = await pool.query(
+            `UPDATE playlists
+             SET auto_update_enabled = $1,
+                 auto_update_sort_mode = COALESCE($2, auto_update_sort_mode),
+                 updated_at = CURRENT_TIMESTAMP
+             WHERE id = $3
+             RETURNING auto_update_enabled, auto_update_sort_mode, last_auto_updated_at, last_auto_update_status`,
+            [enabled, sortMode, id]
+        );
+        const updated = updatedResult.rows[0];
+
+        res.json({
+            autoUpdateEnabled: updated.auto_update_enabled,
+            autoUpdateSortMode: updated.auto_update_sort_mode,
+            lastAutoUpdatedAt: updated.last_auto_updated_at,
+            lastAutoUpdateStatus: updated.last_auto_update_status,
+        });
+    } catch (error) {
+        logger.error({ err: error, playlistId: req.params.id }, 'Update automatic playlist settings error');
+        res.status(500).json({ error: 'Failed to update automatic playlist settings' });
     }
 });
 

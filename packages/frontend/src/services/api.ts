@@ -44,6 +44,10 @@ export interface Playlist {
     ownerName: string;
     spotifyPlaylistId: string | null;
     status: 'pending' | 'generated';
+    autoUpdateEnabled: boolean;
+    autoUpdateSortMode: SortMode;
+    lastAutoUpdatedAt: string | null;
+    lastAutoUpdateStatus: string | null;
     role: 'owner' | 'member';
     createdAt: string;
 }
@@ -91,6 +95,14 @@ export const playlistApi = {
             spotifyUrl: string;
             trackCount: number;
         }>(`/api/playlists/${id}/generate`, { sortMode }),
+
+    setAutoUpdate: (id: number, settings: { enabled: boolean; sortMode?: SortMode }) =>
+        api.patch<{
+            autoUpdateEnabled: boolean;
+            autoUpdateSortMode: SortMode;
+            lastAutoUpdatedAt: string | null;
+            lastAutoUpdateStatus: string | null;
+        }>(`/api/playlists/${id}/auto-update`, settings),
 
     delete: (id: number, deleteFromSpotify: boolean = false) =>
         api.delete<{ message: string }>(`/api/playlists/${id}?deleteFromSpotify=${deleteFromSpotify}`),

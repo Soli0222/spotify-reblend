@@ -71,6 +71,11 @@ export async function initDatabase(): Promise<void> {
         owner_id INTEGER REFERENCES users(id),
         spotify_playlist_id VARCHAR(255),
         status VARCHAR(50) DEFAULT 'pending',
+        auto_update_enabled BOOLEAN DEFAULT false,
+        auto_update_sort_mode VARCHAR(20) DEFAULT 'shuffle',
+        last_auto_updated_at TIMESTAMP,
+        last_auto_update_status VARCHAR(50),
+        last_auto_update_error TEXT,
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
       );
@@ -94,6 +99,17 @@ export async function initDatabase(): Promise<void> {
         created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
         UNIQUE(playlist_id, user_id)
       );
+
+      ALTER TABLE playlists
+        ADD COLUMN IF NOT EXISTS auto_update_enabled BOOLEAN DEFAULT false,
+        ADD COLUMN IF NOT EXISTS auto_update_sort_mode VARCHAR(20) DEFAULT 'shuffle',
+        ADD COLUMN IF NOT EXISTS last_auto_updated_at TIMESTAMP,
+        ADD COLUMN IF NOT EXISTS last_auto_update_status VARCHAR(50),
+        ADD COLUMN IF NOT EXISTS last_auto_update_error TEXT;
+
+      CREATE INDEX IF NOT EXISTS idx_playlists_auto_update
+        ON playlists (auto_update_enabled)
+        WHERE auto_update_enabled;
     `);
     console.log('Database tables initialized');
   } finally {
