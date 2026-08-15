@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '../contexts/AuthContext';
-import { playlistApi, authApi, invitationApi, PlaylistDetail, PlaylistTrack, SortMode } from '../services/api';
+import { playlistApi, authApi, invitationApi, PlaylistDetail, PlaylistTrack, SkippedMember, SortMode } from '../services/api';
 import './PlaylistDetailPage.css';
 
 interface SearchUser {
@@ -14,7 +14,7 @@ interface SearchUser {
 export default function PlaylistDetailPage() {
     const { id } = useParams<{ id: string }>();
     const navigate = useNavigate();
-    const { user } = useAuth();
+    const { user, login } = useAuth();
     const [playlist, setPlaylist] = useState<PlaylistDetail | null>(null);
     const [isLoading, setIsLoading] = useState(true);
     const [error, setError] = useState<string | null>(null);
@@ -35,6 +35,7 @@ export default function PlaylistDetailPage() {
         spotifyUrl: string;
         trackCount: number;
         message: string;
+        skippedMembers: SkippedMember[];
     } | null>(null);
     const [sortMode, setSortMode] = useState<SortMode>('shuffle');
 
@@ -136,6 +137,7 @@ export default function PlaylistDetailPage() {
                 spotifyUrl: response.data.spotifyUrl,
                 trackCount: response.data.trackCount,
                 message: response.data.message,
+                skippedMembers: response.data.skippedMembers,
             });
             await loadPlaylist();
             await loadTracks();
@@ -217,11 +219,23 @@ export default function PlaylistDetailPage() {
     const isOwner = playlist.userRole === 'owner';
     const canGenerate = isOwner && playlist.members.length >= 1;
     const isRegenerate = playlist.status === 'generated';
+    const invalidOtherMembers = playlist.members.filter(member =>
+        member.tokenStatus === 'invalid' && member.id !== user?.id
+    );
 
     return (
         <div className="playlist-detail-page">
             <div className="container">
                 <div className="detail-content animate-slideUp">
+                    {user?.tokenStatus === 'invalid' && (
+                        <div className="spotify-connection-warning card" role="alert">
+                            <p>Spotifyとの連携が切れています。再ログインしてください</p>
+                            <button className="btn btn-primary btn-sm" onClick={() => void login()}>
+                                Spotifyで再ログイン
+                            </button>
+                        </div>
+                    )}
+
                     <div className="page-header">
                         <Link to="/dashboard" className="back-link">
                             <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -254,6 +268,11 @@ export default function PlaylistDetailPage() {
                             <div className="success-icon">🎉</div>
                             <h2>{generateResult.message}</h2>
                             <p>{generateResult.trackCount}曲がブレンドされました</p>
+                            {generateResult.skippedMembers.length > 0 && (
+                                <p className="generate-skipped-members">
+                                    {generateResult.skippedMembers.map(member => member.displayName ?? '不明なメンバー').join('、')}さんの曲は取得できませんでした
+                                </p>
+                            )}
                             <a
                                 href={generateResult.spotifyUrl}
                                 target="_blank"
@@ -324,6 +343,9 @@ export default function PlaylistDetailPage() {
                                         <span className={`badge badge-${member.role}`}>
                                             {member.role === 'owner' ? 'オーナー' : 'メンバー'}
                                         </span>
+                                        {member.tokenStatus === 'invalid' && (
+                                            <span className="badge badge-warning">⚠️ 連携切れ</span>
+                                        )}
                                     </div>
                                 </div>
                             ))}
@@ -411,6 +433,12 @@ export default function PlaylistDetailPage() {
                                     <br />
                                     <small>※ インストゥルメンタル曲は自動的に除外されます</small>
                                 </p>
+
+                                {invalidOtherMembers.length > 0 && (
+                                    <p className="generate-warning">
+                                        {invalidOtherMembers.map(member => member.displayName).join('、')}さんのSpotify連携が切れているため、曲は含まれません。本人に再ログインを依頼してください。
+                                    </p>
+                                )}
 
                                 <div className="sort-mode-selector">
                                     <label className="sort-mode-label">曲の並び順:</label>
@@ -558,6 +586,9 @@ export default function PlaylistDetailPage() {
                             )}
                             {playlist.lastAutoUpdateStatus === 'failed' && (
                                 <p className="auto-update-warning">直近の自動更新に失敗しました</p>
+                            )}
+                            {playlist.lastAutoUpdateStatus === 'partial' && (
+                                <p className="auto-update-warning">一部メンバーの曲を取得できませんでした</p>
                             )}
                         </div>
                     </section>

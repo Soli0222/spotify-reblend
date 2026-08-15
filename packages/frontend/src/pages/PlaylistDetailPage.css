@@ -23,6 +23,18 @@
     margin-bottom: var(--spacing-xl);
 }
 
+.spotify-connection-warning {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-color: var(--color-warning);
+    background: rgba(245, 155, 35, 0.1);
+    color: var(--color-text-primary);
+}
+
 .back-link {
     display: inline-flex;
     align-items: center;
@@ -221,6 +233,13 @@
 .generate-hint {
     margin-top: var(--spacing-md);
     font-size: var(--font-size-sm);
+}
+
+.generate-warning,
+.generate-skipped-members {
+    color: var(--color-warning);
+    font-size: var(--font-size-sm);
+    margin-bottom: var(--spacing-lg);
 }
 
 /* Auto update section */
@@ -492,6 +511,11 @@
     }
 
     .sort-mode-options {
+        flex-direction: column;
+    }
+
+    .spotify-connection-warning {
+        align-items: stretch;
         flex-direction: column;
     }
 }

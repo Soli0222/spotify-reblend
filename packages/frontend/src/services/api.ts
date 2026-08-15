@@ -11,13 +11,31 @@ const api = axios.create({
     },
 });
 
+export type TokenStatus = 'active' | 'invalid';
+
+export interface User {
+    id: number;
+    spotifyId: string;
+    displayName: string;
+    email: string;
+    tokenStatus: TokenStatus;
+}
+
+export type AuthCallbackUser = Omit<User, 'tokenStatus'>;
+
+export interface SkippedMember {
+    id: number;
+    displayName: string | null;
+    reason: 'token-invalid' | 'no-tracks';
+}
+
 // Auth API
 export const authApi = {
     getLoginUrl: () => api.get<{ url: string }>('/api/auth/login'),
 
     callback: (code: string, state: string) =>
         api.post<{
-            user: { id: number; spotifyId: string; displayName: string; email: string };
+            user: AuthCallbackUser;
             expiresAt: string;
         }>('/api/auth/callback', { code, state }),
 
@@ -25,7 +43,7 @@ export const authApi = {
         api.post<{ expiresAt: string }>('/api/auth/refresh'),
 
     getMe: () =>
-        api.get<{ id: number; spotifyId: string; displayName: string; email: string }>('/api/auth/me'),
+        api.get<User>('/api/auth/me'),
 
     logout: () => api.post<{ message: string }>('/api/auth/logout'),
 
@@ -59,6 +77,7 @@ export interface PlaylistDetail extends Playlist {
         spotifyId: string;
         displayName: string;
         role: 'owner' | 'member';
+        tokenStatus: TokenStatus;
     }>;
     pendingInvitations: Array<{
         id: number;
@@ -94,6 +113,7 @@ export const playlistApi = {
             spotifyPlaylistId: string;
             spotifyUrl: string;
             trackCount: number;
+            skippedMembers: SkippedMember[];
         }>(`/api/playlists/${id}/generate`, { sortMode }),
 
     setAutoUpdate: (id: number, settings: { enabled: boolean; sortMode?: SortMode }) =>

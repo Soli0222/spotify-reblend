@@ -303,6 +303,11 @@ button {
   color: var(--color-text-secondary);
 }
 
+.badge-warning {
+  background: rgba(245, 155, 35, 0.2);
+  color: var(--color-warning);
+}
+
 /* Loading spinner */
 .spinner {
   width: 40px;
