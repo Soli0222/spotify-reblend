@@ -13,10 +13,5 @@
         "start": "pnpm --filter spotify-reblend-backend start",
         "test": "pnpm -r test"
     },
-    "pnpm": {
-        "onlyBuiltDependencies": [
-            "esbuild"
-        ]
-    },
-    "packageManager": "pnpm@10.33.4"
+    "packageManager": "pnpm@11.1.1"
 }
