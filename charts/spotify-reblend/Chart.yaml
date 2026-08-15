@@ -4,5 +4,5 @@ description: A Helm chart for Spotify ReBlend application
 type: application
 sources:
   - https://github.com/Soli0222/spotify-reblend
-version: 0.3.0
+version: 0.4.0
 appVersion: "1.5.0"
