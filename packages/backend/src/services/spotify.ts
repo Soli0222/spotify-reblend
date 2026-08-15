@@ -73,7 +73,6 @@ export const INSTRUMENTAL_TRACK_NAME_PATTERNS: readonly RegExp[] = [
     /\bskit\b/i,
     /\boverture\b/i,
     /序曲/i,
-    /\bSE\b/,
 ];
 
 export function normalizeTrackName(name: string): string {

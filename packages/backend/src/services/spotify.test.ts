@@ -149,7 +149,6 @@ describe('filterInstrumentalTracks', () => {
         ['skit', /\bskit\b/i, 'Skit #1', 'Skittish'],
         ['overture', /\boverture\b/i, 'Overture', 'Overturn'],
         ['Japanese overture', /序曲/i, '序曲', '前奏曲'],
-        ['sound effect', /\bSE\b/, 'Track [SE]', 'Se'],
     ])('filters %s titles without matching its counterexample', (_description, pattern, excludedName, keptName) => {
         expect(INSTRUMENTAL_TRACK_NAME_PATTERNS.some(candidate => (
             candidate.source === pattern.source && candidate.flags === pattern.flags
@@ -184,10 +183,14 @@ describe('filterInstrumentalTracks', () => {
         }, 'Excluded instrumental track by name pattern');
     });
 
-    it('does not match SE when it is part of a longer title word', () => {
-        const result = spotifyService.filterInstrumentalTracks([createMockTrack('SEASON')]);
+    it.each([
+        'SE TE NOTA',
+        'ASI SE BAILA',
+        'NO SE VA',
+    ])('keeps all-caps regular track "%s"', trackName => {
+        const result = spotifyService.filterInstrumentalTracks([createMockTrack(trackName)]);
 
-        expect(result.map(track => track.name)).toEqual(['SEASON']);
+        expect(result.map(track => track.name)).toEqual([trackName]);
     });
 });
 
