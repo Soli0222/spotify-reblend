@@ -1,5 +1,20 @@
-import { afterEach, describe, it, expect } from 'vitest';
-import { isRefreshTokenPermanentlyInvalid, spotifyService } from './spotify';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import {
+    INSTRUMENTAL_TRACK_NAME_PATTERNS,
+    isRefreshTokenPermanentlyInvalid,
+    normalizeTrackName,
+    spotifyService,
+} from './spotify';
+
+const mocks = vi.hoisted(() => ({
+    loggerDebug: vi.fn(),
+}));
+
+vi.mock('../utils/logger', () => ({
+    logger: {
+        debug: mocks.loggerDebug,
+    },
+}));
 
 // Mock track for testing
 function createMockTrack(name: string, duration_ms?: number) {
@@ -16,6 +31,8 @@ function createMockTrack(name: string, duration_ms?: number) {
 const originalMinTrackDurationMs = process.env.MIN_TRACK_DURATION_MS;
 
 afterEach(() => {
+    mocks.loggerDebug.mockClear();
+
     if (originalMinTrackDurationMs === undefined) {
         delete process.env.MIN_TRACK_DURATION_MS;
     } else {
@@ -123,6 +140,58 @@ describe('filterInstrumentalTracks', () => {
         const result = spotifyService.filterInstrumentalTracks(tracks);
         expect(result).toHaveLength(0);
     });
+
+    it.each([
+        ['interlude', /\binterlude\b/i, 'Album Interlude', 'Interstellar'],
+        ['Japanese interlude', /インタールード/i, 'インタールード', 'インターナショナル'],
+        ['intro', /\bintro\b/i, 'Intro', 'Introduction'],
+        ['outro', /\boutro\b/i, 'Song (Outro)', 'Outrovert'],
+        ['skit', /\bskit\b/i, 'Skit #1', 'Skittish'],
+        ['overture', /\boverture\b/i, 'Overture', 'Overturn'],
+        ['Japanese overture', /序曲/i, '序曲', '前奏曲'],
+    ])('filters %s titles without matching its counterexample', (_description, pattern, excludedName, keptName) => {
+        expect(INSTRUMENTAL_TRACK_NAME_PATTERNS.some(candidate => (
+            candidate.source === pattern.source && candidate.flags === pattern.flags
+        ))).toBe(true);
+
+        const result = spotifyService.filterInstrumentalTracks([
+            createMockTrack(excludedName),
+            createMockTrack(keptName),
+        ]);
+
+        expect(result.map(track => track.name)).toEqual([keptName]);
+    });
+
+    it('normalizes full-width punctuation before matching name patterns', () => {
+        expect(normalizeTrackName('曲［Inst］〜')).toBe('曲[Inst]~');
+
+        const result = spotifyService.filterInstrumentalTracks([
+            createMockTrack('曲［Inst］'),
+            createMockTrack('曲（Interlude）'),
+            createMockTrack('Introduction〜'),
+        ]);
+
+        expect(result.map(track => track.name)).toEqual(['Introduction〜']);
+    });
+
+    it('logs each excluded track name at debug level', () => {
+        spotifyService.filterInstrumentalTracks([createMockTrack('Album Interlude')]);
+
+        expect(mocks.loggerDebug).toHaveBeenCalledWith({
+            trackName: 'Album Interlude',
+            pattern: '\\binterlude\\b',
+        }, 'Excluded instrumental track by name pattern');
+    });
+
+    it.each([
+        'SE TE NOTA',
+        'ASI SE BAILA',
+        'NO SE VA',
+    ])('keeps all-caps regular track "%s"', trackName => {
+        const result = spotifyService.filterInstrumentalTracks([createMockTrack(trackName)]);
+
+        expect(result.map(track => track.name)).toEqual([trackName]);
+    });
 });
 
 describe('isRefreshTokenPermanentlyInvalid', () => {
@@ -167,7 +236,7 @@ describe('filterTracks', () => {
 
     it('filters tracks below the minimum duration', () => {
         const result = spotifyService.filterTracks([
-            createMockTrack('Short interlude', 89999),
+            createMockTrack('Short track', 89999),
             createMockTrack('Full song', 90001),
         ], { minDurationMs: 90000 });
 
@@ -187,7 +256,7 @@ describe('filterTracks', () => {
     it('uses the default duration when the environment variable is unset', () => {
         delete process.env.MIN_TRACK_DURATION_MS;
 
-        const result = spotifyService.filterTracks([createMockTrack('Short interlude', 89999)]);
+        const result = spotifyService.filterTracks([createMockTrack('Short track', 89999)]);
 
         expect(result.tracks).toHaveLength(0);
     });
@@ -195,7 +264,7 @@ describe('filterTracks', () => {
     it('uses the default duration when the environment variable is invalid', () => {
         process.env.MIN_TRACK_DURATION_MS = 'not-a-number';
 
-        const result = spotifyService.filterTracks([createMockTrack('Short interlude', 89999)]);
+        const result = spotifyService.filterTracks([createMockTrack('Short track', 89999)]);
 
         expect(result.tracks).toHaveLength(0);
     });
@@ -203,7 +272,7 @@ describe('filterTracks', () => {
     it('uses the default duration when the environment variable is empty', () => {
         process.env.MIN_TRACK_DURATION_MS = '';
 
-        const result = spotifyService.filterTracks([createMockTrack('Short interlude', 89999)]);
+        const result = spotifyService.filterTracks([createMockTrack('Short track', 89999)]);
 
         expect(result.tracks).toHaveLength(0);
     });
@@ -211,15 +280,25 @@ describe('filterTracks', () => {
     it('disables duration filtering when the environment variable is zero', () => {
         process.env.MIN_TRACK_DURATION_MS = '0';
 
-        const result = spotifyService.filterTracks([createMockTrack('Short interlude', 1)]);
+        const result = spotifyService.filterTracks([createMockTrack('Short track', 1)]);
 
-        expect(result.tracks.map(track => track.name)).toEqual(['Short interlude']);
+        expect(result.tracks.map(track => track.name)).toEqual(['Short track']);
         expect(result.filteredByDuration).toBe(0);
     });
 
     it('reports tracks matching both filters as name exclusions', () => {
         const result = spotifyService.filterTracks([
             createMockTrack('Short Song (Instrumental)', 1),
+        ], { minDurationMs: 90000 });
+
+        expect(result.tracks).toHaveLength(0);
+        expect(result.filteredByName).toBe(1);
+        expect(result.filteredByDuration).toBe(0);
+    });
+
+    it('counts tracks matching the added name patterns as name exclusions', () => {
+        const result = spotifyService.filterTracks([
+            createMockTrack('Overture', 120000),
         ], { minDurationMs: 90000 });
 
         expect(result.tracks).toHaveLength(0);
