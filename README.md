@@ -146,6 +146,22 @@ docker-compose down -v
   - `reblend_blend_executed_total`: ブレンド実行回数
   - `reblend_active_users`: 現在の登録ユーザー数
   - `reblend_tracks_filtered_total`: ブレンドから除外された曲数（`reason` は `duration` または `name`）
+  - `reblend_auto_update_runs_total`: 自動更新の結果別実行数（`success` / `partial` / `failed` / `skipped`）
+  - `reblend_auto_update_duration_seconds`: 自動更新1件あたりの処理時間
+  - `reblend_auto_update_last_success_timestamp`: 最後に完全成功した自動更新のUnix時刻
+
+### 自動更新
+
+生成済みプレイリストの所有者は自動更新を有効化できます。アプリケーション側のスケジューラは既定で無効です。運用環境で有効にするには、次を設定してください。
+
+```dotenv
+AUTO_UPDATE_ENABLED=true
+AUTO_UPDATE_CRON="0 5 * * *"
+AUTO_UPDATE_TZ=Asia/Tokyo
+AUTO_UPDATE_CONCURRENCY=1
+```
+
+指定時刻に、Spotify プレイリストIDを持つオプトイン済みのプレイリストだけを更新します。複数レプリカでは PostgreSQL advisory lock により、同時に実行されるジョブは1つに制限されます。
 
 #### Prometheus設定例 (`prometheus.yml`)
 

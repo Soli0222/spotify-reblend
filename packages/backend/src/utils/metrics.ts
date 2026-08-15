@@ -55,6 +55,23 @@ export const metrics = {
         labelNames: ['method', 'route', 'status'],
         buckets: [0.1, 0.3, 0.5, 1, 2, 5],
         registers: [registry],
+    }),
+    autoUpdateRuns: new Counter({
+        name: 'reblend_auto_update_runs_total',
+        help: 'Total automatic playlist update attempts by result',
+        labelNames: ['result'],
+        registers: [registry],
+    }),
+    autoUpdateDuration: new Histogram({
+        name: 'reblend_auto_update_duration_seconds',
+        help: 'Duration of individual automatic playlist updates',
+        buckets: [0.1, 0.3, 0.5, 1, 2, 5, 10, 30, 60],
+        registers: [registry],
+    }),
+    autoUpdateLastSuccessTimestamp: new Gauge({
+        name: 'reblend_auto_update_last_success_timestamp',
+        help: 'Unix timestamp of the most recent successful automatic playlist update',
+        registers: [registry],
     })
 };
 
