@@ -58,6 +58,18 @@
     padding: var(--spacing-2xl) 0;
 }
 
+.spotify-connection-warning {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: var(--spacing-md);
+    margin-bottom: var(--spacing-xl);
+    padding: var(--spacing-md) var(--spacing-lg);
+    border-color: var(--color-warning);
+    background: rgba(245, 155, 35, 0.1);
+    color: var(--color-text-primary);
+}
+
 .dashboard-section {
     margin-bottom: var(--spacing-2xl);
 }
@@ -213,5 +225,10 @@
 
     .playlist-grid {
         grid-template-columns: 1fr;
+    }
+
+    .spotify-connection-warning {
+        align-items: stretch;
+        flex-direction: column;
     }
 }

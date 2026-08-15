@@ -5,7 +5,7 @@ import { playlistApi, invitationApi, Playlist, Invitation } from '../services/ap
 import './DashboardPage.css';
 
 export default function DashboardPage() {
-    const { user, logout } = useAuth();
+    const { user, logout, login } = useAuth();
     const [playlists, setPlaylists] = useState<Playlist[]>([]);
     const [invitations, setInvitations] = useState<Invitation[]>([]);
     const [isLoading, setIsLoading] = useState(true);
@@ -85,6 +85,15 @@ export default function DashboardPage() {
 
             <main className="dashboard-main">
                 <div className="container">
+                    {user?.tokenStatus === 'invalid' && (
+                        <div className="spotify-connection-warning card" role="alert">
+                            <p>Spotifyとの連携が切れています。再ログインしてください</p>
+                            <button className="btn btn-primary btn-sm" onClick={() => void login()}>
+                                Spotifyで再ログイン
+                            </button>
+                        </div>
+                    )}
+
                     {/* Pending Invitations */}
                     {invitations.length > 0 && (
                         <section className="dashboard-section animate-slideUp">

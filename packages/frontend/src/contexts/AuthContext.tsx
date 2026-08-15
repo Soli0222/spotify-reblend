@@ -1,12 +1,5 @@
 import { createContext, useContext, useState, useEffect, ReactNode } from 'react';
-import { authApi } from '../services/api';
-
-interface User {
-    id: number;
-    spotifyId: string;
-    displayName: string;
-    email: string;
-}
+import { authApi, User } from '../services/api';
 
 interface AuthContextType {
     user: User | null;
@@ -51,7 +44,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     const handleCallback = async (code: string, state: string) => {
         try {
             const response = await authApi.callback(code, state);
-            setUser(response.data.user);
+            setUser({ ...response.data.user, tokenStatus: 'active' });
         } catch (error) {
             console.error('Callback error:', error);
             throw error;
