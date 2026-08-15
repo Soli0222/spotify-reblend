@@ -6,12 +6,14 @@ const mocks = vi.hoisted(() => ({
     query: vi.fn(),
     blendTracks: vi.fn(),
     getTopTracks: vi.fn(),
-    filterInstrumentalTracks: vi.fn(),
+    filterTracks: vi.fn(),
     createPlaylist: vi.fn(),
     addTracksToPlaylist: vi.fn(),
     clearPlaylistTracks: vi.fn(),
     followPlaylist: vi.fn(),
     refreshToken: vi.fn(),
+    tracksFiltered: vi.fn(),
+    loggerInfo: vi.fn(),
 }));
 
 vi.mock('../config/database', () => ({
@@ -25,7 +27,7 @@ vi.mock('./blend', () => ({
 vi.mock('./spotify', () => ({
     spotifyService: {
         getTopTracks: mocks.getTopTracks,
-        filterInstrumentalTracks: mocks.filterInstrumentalTracks,
+        filterTracks: mocks.filterTracks,
         createPlaylist: mocks.createPlaylist,
         addTracksToPlaylist: mocks.addTracksToPlaylist,
         clearPlaylistTracks: mocks.clearPlaylistTracks,
@@ -49,12 +51,13 @@ vi.mock('../utils/metrics', () => ({
     metrics: {
         playlistCreated: { inc: vi.fn() },
         blendExecuted: { inc: vi.fn() },
+        tracksFiltered: { inc: mocks.tracksFiltered },
     },
 }));
 
 vi.mock('../utils/logger', () => ({
     logger: {
-        info: vi.fn(),
+        info: mocks.loggerInfo,
         warn: vi.fn(),
         error: vi.fn(),
     },
@@ -92,7 +95,11 @@ function playlist(spotifyPlaylistId: string | null) {
 
 function setSuccessfulTrackCollection() {
     mocks.getTopTracks.mockResolvedValue([track]);
-    mocks.filterInstrumentalTracks.mockReturnValue([track]);
+    mocks.filterTracks.mockReturnValue({
+        tracks: [track],
+        filteredByDuration: 0,
+        filteredByName: 0,
+    });
     mocks.blendTracks.mockResolvedValue({ tracks: [track], contributionsByUser: new Map() });
 }
 
@@ -298,5 +305,34 @@ describe('generatePlaylist', () => {
             ok: false,
             reason: 'no-tracks',
         });
+    });
+
+    it('records track filters by reason', async () => {
+        mocks.query
+            .mockResolvedValueOnce({ rows: [playlist(null)] })
+            .mockResolvedValueOnce({ rows: [member] })
+            .mockResolvedValueOnce({ rows: [{ spotify_id: 'owner-spotify-id', access_token: 'owner-access-token' }] })
+            .mockResolvedValue({ rows: [] });
+        mocks.filterTracks.mockReturnValue({
+            tracks: [track],
+            filteredByDuration: 2,
+            filteredByName: 3,
+        });
+        mocks.createPlaylist.mockResolvedValue({
+            id: 'new-spotify-playlist',
+            external_urls: { spotify: 'https://open.spotify.com/playlist/new-spotify-playlist' },
+        });
+
+        await generatePlaylist(12, { sortMode: 'shuffle' });
+
+        expect(mocks.tracksFiltered).toHaveBeenCalledWith({ reason: 'duration' }, 2);
+        expect(mocks.tracksFiltered).toHaveBeenCalledWith({ reason: 'name' }, 3);
+        expect(mocks.loggerInfo).toHaveBeenCalledWith({
+            playlistId: 12,
+            memberId: 1,
+            filteredByDuration: 2,
+            filteredByName: 3,
+            remaining: 1,
+        }, 'Filtered tracks for blend');
     });
 });

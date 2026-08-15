@@ -40,6 +40,9 @@ config:
   appOrigin: "http://127.0.0.1:3000"
   allowedOrigins: "http://127.0.0.1:3000"
 
+  # Exclude top tracks shorter than this duration when generating blends. Set to 0 to disable.
+  minTrackDurationMs: 90000
+
   # Security secrets
   authSecret: ""
   tokenEncryptionKey: ""

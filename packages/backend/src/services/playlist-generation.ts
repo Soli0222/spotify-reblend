@@ -4,6 +4,7 @@ import { spotifyService, SpotifyTrack } from './spotify';
 import { getValidAccessToken } from './spotify-token';
 import { decryptSecret } from '../utils/crypto';
 import { logger } from '../utils/logger';
+import { metrics } from '../utils/metrics';
 
 export type GenerateOutcome =
     | { ok: true; spotifyPlaylistId: string; spotifyUrl: string; trackCount: number; created: boolean; memberCount: number }
@@ -52,7 +53,22 @@ export async function generatePlaylist(
 
         try {
             let tracks = await spotifyService.getTopTracks(accessToken, 50);
-            tracks = spotifyService.filterInstrumentalTracks(tracks);
+            const filterResult = spotifyService.filterTracks(tracks);
+            tracks = filterResult.tracks;
+
+            if (filterResult.filteredByDuration > 0) {
+                metrics.tracksFiltered.inc({ reason: 'duration' }, filterResult.filteredByDuration);
+            }
+            if (filterResult.filteredByName > 0) {
+                metrics.tracksFiltered.inc({ reason: 'name' }, filterResult.filteredByName);
+            }
+            logger.info({
+                playlistId,
+                memberId: member.id,
+                filteredByDuration: filterResult.filteredByDuration,
+                filteredByName: filterResult.filteredByName,
+                remaining: tracks.length,
+            }, 'Filtered tracks for blend');
             userTracks.set(member.spotify_id, tracks);
         } catch (error) {
             logger.error({ err: error, memberId: member.id }, 'Failed to get top tracks');

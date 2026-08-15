@@ -21,10 +21,23 @@ export interface SpotifyTrack {
     name: string;
     artists: { name: string }[];
     album: { name: string; images: { url: string }[] };
+    duration_ms?: number;
     external_ids?: {
         isrc?: string;
     };
 }
+
+export interface TrackFilterOptions {
+    minDurationMs?: number;
+}
+
+export interface TrackFilterResult {
+    tracks: SpotifyTrack[];
+    filteredByDuration: number;
+    filteredByName: number;
+}
+
+const DEFAULT_MIN_TRACK_DURATION_MS = 90000;
 
 export class SpotifyService {
     private clientId: string;
@@ -146,6 +159,41 @@ export class SpotifyService {
             }
             return true; // Include this track
         });
+    }
+
+    filterShortTracks(tracks: SpotifyTrack[], minDurationMs: number): SpotifyTrack[] {
+        if (minDurationMs === 0) {
+            return tracks;
+        }
+
+        return tracks.filter(track => track.duration_ms === undefined || track.duration_ms >= minDurationMs);
+    }
+
+    filterTracks(tracks: SpotifyTrack[], options: TrackFilterOptions = {}): TrackFilterResult {
+        const minDurationMs = options.minDurationMs ?? this.getMinTrackDurationMs();
+        const tracksWithoutInstrumentals = this.filterInstrumentalTracks(tracks);
+        const filteredTracks = this.filterShortTracks(tracksWithoutInstrumentals, minDurationMs);
+
+        return {
+            tracks: filteredTracks,
+            filteredByName: tracks.length - tracksWithoutInstrumentals.length,
+            filteredByDuration: tracksWithoutInstrumentals.length - filteredTracks.length,
+        };
+    }
+
+    private getMinTrackDurationMs(): number {
+        const configuredDuration = process.env.MIN_TRACK_DURATION_MS;
+
+        if (!configuredDuration || configuredDuration.trim() === '') {
+            return DEFAULT_MIN_TRACK_DURATION_MS;
+        }
+
+        const parsedDuration = Number(configuredDuration);
+        if (!Number.isFinite(parsedDuration) || parsedDuration < 0) {
+            return DEFAULT_MIN_TRACK_DURATION_MS;
+        }
+
+        return parsedDuration;
     }
 
     async createPlaylist(
