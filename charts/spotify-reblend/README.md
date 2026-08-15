@@ -43,6 +43,11 @@ A Helm chart for Spotify ReBlend application
 | metrics.serviceMonitor.scrapeTimeout | string | `"10s"` |  |
 | nameOverride | string | `""` |  |
 | nodeSelector | object | `{}` |  |
+| otel.enabled | bool | `false` | Enables OTLP trace export when an endpoint is configured. |
+| otel.endpoint | string | `""` | OTLP/HTTP collector endpoint. |
+| otel.serviceName | string | `"spotify-reblend-backend"` | Value for `OTEL_SERVICE_NAME`. |
+| otel.tracesSampler | string | `"parentbased_traceidratio"` | Value for `OTEL_TRACES_SAMPLER`. |
+| otel.tracesSamplerArg | string | `"0.1"` | Value for `OTEL_TRACES_SAMPLER_ARG`. |
 | podAnnotations | object | `{}` |  |
 | podSecurityContext | object | `{}` |  |
 | postgres.auth.database | string | `"reblend"` |  |

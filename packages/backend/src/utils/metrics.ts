@@ -1,4 +1,5 @@
 import express from 'express';
+import { Server } from 'http';
 import { collectDefaultMetrics, Registry, Counter, Gauge, Histogram } from 'prom-client';
 import { logger } from './logger';
 
@@ -42,7 +43,7 @@ export const metrics = {
 };
 
 // Start Metrics Server
-export function startMetricsServer(port: number = 9464) {
+export function startMetricsServer(port: number = 9464): Server {
     const app = express();
 
     app.get('/metrics', async (_req, res) => {
@@ -54,7 +55,7 @@ export function startMetricsServer(port: number = 9464) {
         }
     });
 
-    app.listen(port, () => {
+    return app.listen(port, () => {
         logger.info({ port }, 'Metrics server started');
     });
 }

@@ -153,6 +153,22 @@ scrape_configs:
       - targets: ['host.docker.internal:9464']
 ```
 
+### トレース (OpenTelemetry)
+
+OpenTelemetry の自動計装で HTTP、Express、PostgreSQL のトレースを OTLP/HTTP collector に送信できます。既定では無効なので、ローカル起動時に collector への接続エラーは発生しません。
+
+有効にするには、以下を設定してください。
+
+```dotenv
+OTEL_SDK_DISABLED=false
+OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
+OTEL_SERVICE_NAME=spotify-reblend-backend
+OTEL_TRACES_SAMPLER=parentbased_traceidratio
+OTEL_TRACES_SAMPLER_ARG=0.1
+```
+
+`/health` と `/metrics` はトレースから除外されます。Helm では `otel.enabled=true` と `otel.endpoint` を設定します。
+
 ### Grafanaダッシュボード
 
 `monitoring/grafana-dashboard.json` に Grafana 用のダッシュボード定義ファイルが含まれています。
