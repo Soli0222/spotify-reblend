@@ -1,6 +1,7 @@
 import { SpotifyTrack } from './spotify';
 import { reccoBeatsService, smartSortTracks, AudioFeatures } from './reccobeats';
 import { logger } from '../utils/logger';
+import { withSpan } from '../utils/tracing';
 
 export type SortMode = 'shuffle' | 'smart';
 
@@ -53,9 +54,14 @@ export async function blendTracks(
 ): Promise<BlendResult> {
     const { totalTracks = 100, sortMode = 'shuffle' } = options;
     const userCount = userTracks.size;
-    if (userCount === 0) {
-        return { tracks: [], contributionsByUser: new Map() };
-    }
+    return withSpan('blend.tracks', {
+        'blend.user_count': userCount,
+        'blend.sort_mode': sortMode,
+        'blend.total_tracks': totalTracks,
+    }, async () => {
+        if (userCount === 0) {
+            return { tracks: [], contributionsByUser: new Map() };
+        }
 
     // Calculate tracks per user (distribute evenly)
     const tracksPerUser = Math.floor(totalTracks / userCount);
@@ -142,8 +148,9 @@ export async function blendTracks(
         }
     }
 
-    return {
-        tracks: finalTracks,
-        contributionsByUser,
-    };
+        return {
+            tracks: finalTracks,
+            contributionsByUser,
+        };
+    });
 }

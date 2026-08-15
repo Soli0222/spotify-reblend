@@ -1,5 +1,6 @@
 import axios from 'axios';
 import { logger } from '../utils/logger';
+import { withSpan } from '../utils/tracing';
 
 const SPOTIFY_API_BASE = 'https://api.spotify.com/v1';
 const SPOTIFY_AUTH_BASE = 'https://accounts.spotify.com';
@@ -186,15 +187,20 @@ export class SpotifyService {
         return response.data;
     }
 
-    async getTopTracks(accessToken: string, limit: number = 50): Promise<SpotifyTrack[]> {
-        const response = await retryOnRateLimit(() => axios.get(`${SPOTIFY_API_BASE}/me/top/tracks`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            params: {
-                time_range: 'short_term', // Last 4 weeks (1 month)
-                limit,
-            },
-        }));
-        return response.data.items;
+    async getTopTracks(accessToken: string, limit: number = 50, userId?: number): Promise<SpotifyTrack[]> {
+        return withSpan('spotify.top_tracks', {
+            ...(userId === undefined ? {} : { 'spotify.user_id': userId }),
+        }, async span => {
+            const response = await retryOnRateLimit(() => axios.get(`${SPOTIFY_API_BASE}/me/top/tracks`, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                params: {
+                    time_range: 'short_term', // Last 4 weeks (1 month)
+                    limit,
+                },
+            }));
+            span?.setAttribute('spotify.track_count', response.data.items.length);
+            return response.data.items;
+        });
     }
 
     /**
@@ -224,15 +230,24 @@ export class SpotifyService {
     }
 
     filterTracks(tracks: SpotifyTrack[], options: TrackFilterOptions = {}): TrackFilterResult {
-        const minDurationMs = options.minDurationMs ?? this.getMinTrackDurationMs();
-        const tracksWithoutInstrumentals = this.filterInstrumentalTracks(tracks);
-        const filteredTracks = this.filterShortTracks(tracksWithoutInstrumentals, minDurationMs);
+        return withSpan('tracks.filter', { 'filter.input_count': tracks.length }, span => {
+            const minDurationMs = options.minDurationMs ?? this.getMinTrackDurationMs();
+            const tracksWithoutInstrumentals = this.filterInstrumentalTracks(tracks);
+            const filteredTracks = this.filterShortTracks(tracksWithoutInstrumentals, minDurationMs);
+            const filteredByName = tracks.length - tracksWithoutInstrumentals.length;
+            const filteredByDuration = tracksWithoutInstrumentals.length - filteredTracks.length;
 
-        return {
-            tracks: filteredTracks,
-            filteredByName: tracks.length - tracksWithoutInstrumentals.length,
-            filteredByDuration: tracksWithoutInstrumentals.length - filteredTracks.length,
-        };
+            span?.setAttributes({
+                'filter.filtered_by_name': filteredByName,
+                'filter.filtered_by_duration': filteredByDuration,
+                'filter.output_count': filteredTracks.length,
+            });
+            return {
+                tracks: filteredTracks,
+                filteredByName,
+                filteredByDuration,
+            };
+        });
     }
 
     private getMinTrackDurationMs(): number {
@@ -279,46 +294,57 @@ export class SpotifyService {
         playlistId: string,
         trackUris: string[]
     ): Promise<void> {
-        // Spotify allows max 100 tracks per request
-        for (let i = 0; i < trackUris.length; i += 100) {
-            const batch = trackUris.slice(i, i + 100);
-            await retryOnRateLimit(() => axios.post(
-                `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`,
-                { uris: batch },
-                {
-                    headers: {
-                        Authorization: `Bearer ${accessToken}`,
-                        'Content-Type': 'application/json',
-                    },
-                }
-            ));
-        }
+        return withSpan('spotify.playlist.write', {
+            'spotify.playlist_id': playlistId,
+            'spotify.batch_count': Math.ceil(trackUris.length / 100),
+        }, async () => {
+            // Spotify allows max 100 tracks per request
+            for (let i = 0; i < trackUris.length; i += 100) {
+                const batch = trackUris.slice(i, i + 100);
+                await retryOnRateLimit(() => axios.post(
+                    `${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`,
+                    { uris: batch },
+                    {
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json',
+                        },
+                    }
+                ));
+            }
+        });
     }
 
     async clearPlaylistTracks(accessToken: string, playlistId: string): Promise<void> {
-        // Get current tracks
-        const response = await retryOnRateLimit(() => axios.get(`${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`, {
-            headers: { Authorization: `Bearer ${accessToken}` },
-            params: { fields: 'items(track(uri))' },
-        }));
+        return withSpan('spotify.playlist.write', {
+            'spotify.playlist_id': playlistId,
+            'spotify.batch_count': 0,
+        }, async span => {
+            // Get current tracks
+            const response = await retryOnRateLimit(() => axios.get(`${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`, {
+                headers: { Authorization: `Bearer ${accessToken}` },
+                params: { fields: 'items(track(uri))' },
+            }));
 
-        const trackUris = response.data.items
-            .filter((item: { track: { uri: string } | null }) => item.track)
-            .map((item: { track: { uri: string } }) => ({ uri: item.track.uri }));
+            const trackUris = response.data.items
+                .filter((item: { track: { uri: string } | null }) => item.track)
+                .map((item: { track: { uri: string } }) => ({ uri: item.track.uri }));
+            span?.setAttribute('spotify.batch_count', Math.ceil(trackUris.length / 100));
 
-        if (trackUris.length > 0) {
-            // Remove in batches of 100
-            for (let i = 0; i < trackUris.length; i += 100) {
-                const batch = trackUris.slice(i, i + 100);
-                await retryOnRateLimit(() => axios.delete(`${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`, {
-                    headers: {
-                        Authorization: `Bearer ${accessToken}`,
-                        'Content-Type': 'application/json',
-                    },
-                    data: { tracks: batch },
-                }));
+            if (trackUris.length > 0) {
+                // Remove in batches of 100
+                for (let i = 0; i < trackUris.length; i += 100) {
+                    const batch = trackUris.slice(i, i + 100);
+                    await retryOnRateLimit(() => axios.delete(`${SPOTIFY_API_BASE}/playlists/${playlistId}/tracks`, {
+                        headers: {
+                            Authorization: `Bearer ${accessToken}`,
+                            'Content-Type': 'application/json',
+                        },
+                        data: { tracks: batch },
+                    }));
+                }
             }
-        }
+        });
     }
 
     async getPlaylistTracks(accessToken: string, playlistId: string): Promise<SpotifyTrack[]> {
