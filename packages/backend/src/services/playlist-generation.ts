@@ -2,6 +2,7 @@ import { pool } from '../config/database';
 import { blendTracks, SortMode } from './blend';
 import { spotifyService, SpotifyTrack } from './spotify';
 import { getValidAccessToken } from './spotify-token';
+import { decryptSecret } from '../utils/crypto';
 import { logger } from '../utils/logger';
 
 export type GenerateOutcome =
@@ -16,6 +17,9 @@ export async function generatePlaylist(
         'SELECT * FROM playlists WHERE id = $1',
         [playlistId]
     );
+    if (playlistResult.rows.length === 0) {
+        throw new Error(`Playlist ${playlistId} not found`);
+    }
     const playlist = playlistResult.rows[0];
 
     const membersResult = await pool.query(
@@ -72,13 +76,7 @@ export async function generatePlaylist(
     const owner = ownerResult.rows[0];
 
     if (!ownerAccessToken) {
-        const { accessToken } = await getValidAccessToken({
-            id: playlist.owner_id,
-            access_token: owner.access_token,
-            refresh_token: null,
-            token_expires_at: new Date(Date.now() + 1),
-        });
-        ownerAccessToken = accessToken;
+        ownerAccessToken = decryptSecret(owner.access_token);
     }
 
     if (!ownerAccessToken) {

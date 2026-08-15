@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
+import express, { NextFunction, Request, Response } from 'express';
+import { AddressInfo } from 'node:net';
 
 const mocks = vi.hoisted(() => ({
     query: vi.fn(),
@@ -32,7 +34,34 @@ vi.mock('./spotify', () => ({
     },
 }));
 
+vi.mock('../utils/auth', () => ({
+    requireAuth: (req: Request, _res: Response, next: NextFunction) => {
+        req.authUser = { id: 1, spotifyId: 'owner-spotify-id' };
+        next();
+    },
+}));
+
+vi.mock('../utils/http', () => ({
+    rateLimit: () => (_req: Request, _res: Response, next: NextFunction) => next(),
+}));
+
+vi.mock('../utils/metrics', () => ({
+    metrics: {
+        playlistCreated: { inc: vi.fn() },
+        blendExecuted: { inc: vi.fn() },
+    },
+}));
+
+vi.mock('../utils/logger', () => ({
+    logger: {
+        info: vi.fn(),
+        warn: vi.fn(),
+        error: vi.fn(),
+    },
+}));
+
 import { generatePlaylist } from './playlist-generation';
+import playlistsRouter from '../routes/playlists';
 
 const member = {
     id: 1,
@@ -67,9 +96,33 @@ function setSuccessfulTrackCollection() {
     mocks.blendTracks.mockResolvedValue({ tracks: [track], contributionsByUser: new Map() });
 }
 
+async function postGenerate(): Promise<{ status: number; body: unknown }> {
+    const app = express();
+    app.use(express.json());
+    app.use('/api/playlists', playlistsRouter);
+    const server = app.listen(0, '127.0.0.1');
+
+    try {
+        await new Promise<void>((resolve) => server.once('listening', resolve));
+        const { port } = server.address() as AddressInfo;
+        const response = await fetch(`http://127.0.0.1:${port}/api/playlists/12/generate`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ sortMode: 'shuffle' }),
+        });
+
+        return { status: response.status, body: await response.json() };
+    } finally {
+        await new Promise<void>((resolve, reject) => {
+            server.close(error => error ? reject(error) : resolve());
+        });
+    }
+}
+
 describe('generatePlaylist', () => {
     beforeEach(() => {
         vi.clearAllMocks();
+        mocks.query.mockReset();
         setSuccessfulTrackCollection();
     });
 
@@ -126,6 +179,91 @@ describe('generatePlaylist', () => {
             ['spotify:track:track-1']
         );
         expect(mocks.createPlaylist).not.toHaveBeenCalled();
+    });
+
+    it('uses the stored owner access token without refreshing when the member loop cannot obtain it', async () => {
+        const otherMember = {
+            ...member,
+            id: 2,
+            spotify_id: 'member-spotify-id',
+            access_token: 'member-access-token',
+        };
+        mocks.query
+            .mockResolvedValueOnce({ rows: [playlist(null)] })
+            .mockResolvedValueOnce({ rows: [{ ...member, access_token: null }, otherMember] })
+            .mockResolvedValueOnce({ rows: [{ spotify_id: 'owner-spotify-id', access_token: 'stored-owner-access-token' }] })
+            .mockResolvedValue({ rows: [] });
+        mocks.createPlaylist.mockResolvedValue({
+            id: 'new-spotify-playlist',
+            external_urls: { spotify: 'https://open.spotify.com/playlist/new-spotify-playlist' },
+        });
+
+        await expect(generatePlaylist(12, { sortMode: 'shuffle', requestedBy: 1 })).resolves.toMatchObject({
+            ok: true,
+            spotifyPlaylistId: 'new-spotify-playlist',
+            created: true,
+        });
+        expect(mocks.createPlaylist).toHaveBeenCalledWith(
+            'stored-owner-access-token',
+            'owner-spotify-id',
+            'My ReBlend',
+            'A blended playlist'
+        );
+        expect(mocks.refreshToken).not.toHaveBeenCalled();
+    });
+
+    it('returns 200 when the route succeeds through the stored owner token fallback', async () => {
+        const otherMember = {
+            ...member,
+            id: 2,
+            spotify_id: 'member-spotify-id',
+            access_token: 'member-access-token',
+        };
+        mocks.query
+            .mockResolvedValueOnce({ rows: [playlist(null)] })
+            .mockResolvedValueOnce({ rows: [playlist(null)] })
+            .mockResolvedValueOnce({ rows: [{ ...member, access_token: null }, otherMember] })
+            .mockResolvedValueOnce({ rows: [{ spotify_id: 'owner-spotify-id', access_token: 'stored-owner-access-token' }] })
+            .mockResolvedValue({ rows: [] });
+        mocks.createPlaylist.mockResolvedValue({
+            id: 'new-spotify-playlist',
+            external_urls: { spotify: 'https://open.spotify.com/playlist/new-spotify-playlist' },
+        });
+
+        await expect(postGenerate()).resolves.toEqual({
+            status: 200,
+            body: {
+                message: 'Playlist generated successfully',
+                spotifyPlaylistId: 'new-spotify-playlist',
+                spotifyUrl: 'https://open.spotify.com/playlist/new-spotify-playlist',
+                trackCount: 1,
+            },
+        });
+        expect(mocks.createPlaylist).toHaveBeenCalledWith(
+            'stored-owner-access-token',
+            'owner-spotify-id',
+            'My ReBlend',
+            'A blended playlist'
+        );
+        expect(mocks.refreshToken).not.toHaveBeenCalled();
+    });
+
+    it('throws a descriptive error when the playlist does not exist', async () => {
+        mocks.query.mockResolvedValueOnce({ rows: [] });
+
+        await expect(generatePlaylist(12, { sortMode: 'shuffle' })).rejects.toThrow('Playlist 12 not found');
+        expect(mocks.query).toHaveBeenCalledTimes(1);
+    });
+
+    it('keeps the existing 500 response when the playlist disappears after route authorization', async () => {
+        mocks.query
+            .mockResolvedValueOnce({ rows: [playlist(null)] })
+            .mockResolvedValueOnce({ rows: [] });
+
+        await expect(postGenerate()).resolves.toEqual({
+            status: 500,
+            body: { error: 'Failed to generate playlist' },
+        });
     });
 
     it('returns no-members when the playlist has no members', async () => {
