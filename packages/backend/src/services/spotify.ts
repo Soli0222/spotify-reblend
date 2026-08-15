@@ -39,6 +39,7 @@ export interface TrackFilterResult {
 }
 
 const DEFAULT_MIN_TRACK_DURATION_MS = 90000;
+const MAX_RATE_LIMIT_RETRY_DELAY_MS = 5000;
 
 function sleep(ms: number): Promise<void> {
     return new Promise(resolve => setTimeout(resolve, ms));
@@ -51,7 +52,10 @@ function retryAfterMs(error: unknown): number | null {
 
     const retryAfter = error.response.headers?.['retry-after'];
     const seconds = Number(retryAfter);
-    return Number.isFinite(seconds) && seconds >= 0 ? seconds * 1000 : null;
+    const delayMs = seconds * 1000;
+    return Number.isFinite(delayMs) && delayMs >= 0 && delayMs <= MAX_RATE_LIMIT_RETRY_DELAY_MS
+        ? delayMs
+        : null;
 }
 
 async function retryOnRateLimit<T>(request: () => Promise<T>): Promise<T> {

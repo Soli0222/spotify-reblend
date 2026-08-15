@@ -33,6 +33,7 @@ const originalMinTrackDurationMs = process.env.MIN_TRACK_DURATION_MS;
 
 afterEach(() => {
     mocks.loggerDebug.mockClear();
+    vi.useRealTimers();
     vi.restoreAllMocks();
     if (originalMinTrackDurationMs === undefined) {
         delete process.env.MIN_TRACK_DURATION_MS;
@@ -42,16 +43,47 @@ afterEach(() => {
 });
 
 describe('Spotify API rate limits', () => {
-    it('retries once after the Retry-After delay', async () => {
+    it('waits for an acceptable Retry-After delay and retries once', async () => {
+        vi.useFakeTimers();
         const get = vi.spyOn(axios, 'get')
             .mockRejectedValueOnce({
                 isAxiosError: true,
-                response: { status: 429, headers: { 'retry-after': '0' } },
+                response: { status: 429, headers: { 'retry-after': '1' } },
             })
             .mockResolvedValueOnce({ data: { items: [] } });
 
-        await expect(spotifyService.getTopTracks('access-token')).resolves.toEqual([]);
+        const tracks = spotifyService.getTopTracks('access-token');
+        await vi.advanceTimersByTimeAsync(999);
+        expect(get).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(1);
+
+        await expect(tracks).resolves.toEqual([]);
         expect(get).toHaveBeenCalledTimes(2);
+    });
+
+    it('throws immediately when Retry-After exceeds the wait cap', async () => {
+        const rateLimitError = {
+            isAxiosError: true,
+            response: { status: 429, headers: { 'retry-after': '6' } },
+        };
+        const get = vi.spyOn(axios, 'get').mockRejectedValueOnce(rateLimitError);
+
+        await expect(spotifyService.getTopTracks('access-token')).rejects.toBe(rateLimitError);
+        expect(get).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+        { description: 'missing', headers: {} },
+        { description: 'not numeric', headers: { 'retry-after': 'later' } },
+    ])('throws immediately when Retry-After is $description', async ({ headers }) => {
+        const rateLimitError = {
+            isAxiosError: true,
+            response: { status: 429, headers },
+        };
+        const get = vi.spyOn(axios, 'get').mockRejectedValueOnce(rateLimitError);
+
+        await expect(spotifyService.getTopTracks('access-token')).rejects.toBe(rateLimitError);
+        expect(get).toHaveBeenCalledTimes(1);
     });
 });
 
