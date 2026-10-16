@@ -1,5 +1,37 @@
 # Changelog
 
+## [1.6.1](https://github.com/Soli0222/spotify-reblend/compare/v1.6.0...v1.6.1) (2026-10-16)
+
+
+### バグ修正・依存関係の更新
+
+* **chart:** update chart image postgres to v18.6 ([#229](https://github.com/Soli0222/spotify-reblend/issues/229)) ([41c7833](https://github.com/Soli0222/spotify-reblend/commit/41c7833285e74b09f004a6d3f6e882ad94e0e1fb))
+* **ci:** restore Renovate status checks and surface errors ([#221](https://github.com/Soli0222/spotify-reblend/issues/221)) ([2519eda](https://github.com/Soli0222/spotify-reblend/commit/2519edabb09b496c8943ece580207ef38c76e1ec))
+* **deps:** update node @opentelemetry/auto-instrumentations-node to v0.81.0 ([#230](https://github.com/Soli0222/spotify-reblend/issues/230)) ([f53c0e8](https://github.com/Soli0222/spotify-reblend/commit/f53c0e877099d5508cdf51ac606dc726c6436b5a))
+* **deps:** update node @testing-library/jest-dom to v7 ([#250](https://github.com/Soli0222/spotify-reblend/issues/250)) ([776d14e](https://github.com/Soli0222/spotify-reblend/commit/776d14ea301dfff054f1cd784c32e0c6545decb2))
+* **deps:** update node @types/node to ^25.9.9 ([#231](https://github.com/Soli0222/spotify-reblend/issues/231)) ([8191670](https://github.com/Soli0222/spotify-reblend/commit/81916701445fffbd30204dea7a43bae026c16862))
+* **deps:** update node @vitejs/plugin-react to ^6.1.2 ([#232](https://github.com/Soli0222/spotify-reblend/issues/232)) ([fcfdb7a](https://github.com/Soli0222/spotify-reblend/commit/fcfdb7a5f75b48b441a32c56d21b9ac81d0afa1f))
+* **deps:** update node axios to ^1.20.0 ([#235](https://github.com/Soli0222/spotify-reblend/issues/235)) ([95e73e3](https://github.com/Soli0222/spotify-reblend/commit/95e73e38e861f749588e807bd8652c289b221d5b))
+* **deps:** update node dotenv to v18 ([#251](https://github.com/Soli0222/spotify-reblend/issues/251)) ([a0861af](https://github.com/Soli0222/spotify-reblend/commit/a0861af54cb6c93df3822d2100785c3c7fb7b564))
+* **deps:** update node express to ^5.3.0 ([#236](https://github.com/Soli0222/spotify-reblend/issues/236)) ([e894a96](https://github.com/Soli0222/spotify-reblend/commit/e894a96fd514920d57c837c6de3dfe0a77c7167c))
+* **deps:** update node jsdom to v30 ([#252](https://github.com/Soli0222/spotify-reblend/issues/252)) ([65d8de3](https://github.com/Soli0222/spotify-reblend/commit/65d8de38701fc8bb28dd924ae1fce531654a22bc))
+* **deps:** update node node-cron to v4.6.0 ([#237](https://github.com/Soli0222/spotify-reblend/issues/237)) ([d3f3c45](https://github.com/Soli0222/spotify-reblend/commit/d3f3c45c7454a24b5fc32400a37ff8210718f9a2))
+* **deps:** update node pg to ^8.23.1 ([#238](https://github.com/Soli0222/spotify-reblend/issues/238)) ([3d5cd86](https://github.com/Soli0222/spotify-reblend/commit/3d5cd861a60e24e53ecc6e225d0d02f285462b56))
+* **deps:** update node pino to ^10.4.0 ([#239](https://github.com/Soli0222/spotify-reblend/issues/239)) ([26bc267](https://github.com/Soli0222/spotify-reblend/commit/26bc267ad34d63018cc65a1aa676eabcaf0cfb5b))
+* **deps:** update node pino-pretty to ^13.2.0 ([#240](https://github.com/Soli0222/spotify-reblend/issues/240)) ([516a40b](https://github.com/Soli0222/spotify-reblend/commit/516a40bca64aa795aa43ac3f5efde5332c489efe))
+* **deps:** update node pnpm to v11.28.5 ([#244](https://github.com/Soli0222/spotify-reblend/issues/244)) ([1806626](https://github.com/Soli0222/spotify-reblend/commit/1806626e30686f5661ff83422f4a928e059b5df3))
+* **deps:** update node pnpm to v12 ([#253](https://github.com/Soli0222/spotify-reblend/issues/253)) ([a4c4dd2](https://github.com/Soli0222/spotify-reblend/commit/a4c4dd2d472ea6534ff290279e30242281015dcc))
+* **deps:** update node react-router-dom to ^7.18.4 ([#245](https://github.com/Soli0222/spotify-reblend/issues/245)) ([c2ce523](https://github.com/Soli0222/spotify-reblend/commit/c2ce523ea5a06d8a04cbd10481816614605d43de))
+* **deps:** update node tsx to ^4.23.15 ([#241](https://github.com/Soli0222/spotify-reblend/issues/241)) ([50267e2](https://github.com/Soli0222/spotify-reblend/commit/50267e281763e74863bce04169ab7a756ea71057))
+* **deps:** update node typescript to v7 ([#254](https://github.com/Soli0222/spotify-reblend/issues/254)) ([a7e3973](https://github.com/Soli0222/spotify-reblend/commit/a7e3973a6a9bed5758988c22aa16f71516cb0d6e))
+* **deps:** update node vite to ^8.3.4 ([#242](https://github.com/Soli0222/spotify-reblend/issues/242)) ([ee61b12](https://github.com/Soli0222/spotify-reblend/commit/ee61b12c58aa182aeeb8302f1f4bf5abeb2ba862))
+* **deps:** update node vitest to ^4.1.11 ([#223](https://github.com/Soli0222/spotify-reblend/issues/223)) ([1f5dbe1](https://github.com/Soli0222/spotify-reblend/commit/1f5dbe1be4f0cd74734202fb87063b227502f322))
+* **deps:** update node.js to v24.22.0 ([#246](https://github.com/Soli0222/spotify-reblend/issues/246)) ([224ac6f](https://github.com/Soli0222/spotify-reblend/commit/224ac6ffddd03c71a5090cbc9cbfd03d0633f643))
+* **deps:** update opentelemetry-js monorepo ([#247](https://github.com/Soli0222/spotify-reblend/issues/247)) ([a5cb4e1](https://github.com/Soli0222/spotify-reblend/commit/a5cb4e11ae45e1f045dbe4bdc8248a6dad49d786))
+* **deps:** update react monorepo to ^19.3.0 ([#243](https://github.com/Soli0222/spotify-reblend/issues/243)) ([d0c4975](https://github.com/Soli0222/spotify-reblend/commit/d0c49753787925f2801228fee5c5e869e677b307))
+* **deps:** update testing-library monorepo ([#224](https://github.com/Soli0222/spotify-reblend/issues/224)) ([a7035f5](https://github.com/Soli0222/spotify-reblend/commit/a7035f505f6e0cfa860c2324be9a3f4422dd6aa1))
+* use Vitest matchers with Vitest 5 ([#256](https://github.com/Soli0222/spotify-reblend/issues/256)) ([e2e1fe4](https://github.com/Soli0222/spotify-reblend/commit/e2e1fe46edb5e32d4703b014ea16b0c1050dee93))
+
 ## [1.6.0](https://github.com/Soli0222/spotify-reblend/compare/v1.5.0...v1.6.0) (2026-08-15)
 
 
