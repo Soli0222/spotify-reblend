@@ -1,5 +1,12 @@
 # Changelog
 
+## [1.6.2](https://github.com/Soli0222/spotify-reblend/compare/v1.6.1...v1.6.2) (2026-10-17)
+
+
+### バグ修正・依存関係の更新
+
+* **deps:** update node dotenv to ^18.0.8 ([#257](https://github.com/Soli0222/spotify-reblend/issues/257)) ([566b372](https://github.com/Soli0222/spotify-reblend/commit/566b3724aa3c26305bea522addb14b8f77f9a92b))
+
 ## [1.6.1](https://github.com/Soli0222/spotify-reblend/compare/v1.6.0...v1.6.1) (2026-10-16)
 
 
