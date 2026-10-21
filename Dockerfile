@@ -1,18 +1,16 @@
 # Build stage
-FROM node:24.22.0-alpine3.23 AS builder
+FROM node:26.12.0-alpine AS builder
 
 WORKDIR /app
 
-# Install pnpm
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
 # Copy package files
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN npm install --global "$(node -p 'require("./package.json").packageManager')"
 COPY packages/backend/package.json ./packages/backend/
 COPY packages/frontend/package.json ./packages/frontend/
 
 # Install all dependencies
-RUN pnpm install --frozen-lockfile || pnpm install
+RUN pnpm install --frozen-lockfile
 
 # Copy source code
 COPY packages/backend ./packages/backend
@@ -25,20 +23,18 @@ RUN pnpm build:frontend
 RUN pnpm build:backend
 
 # Production stage
-FROM node:24.22.0-alpine3.23 AS runner
+FROM node:26.12.0-alpine AS runner
 
 WORKDIR /app
 
-# Install pnpm for production
-RUN corepack enable && corepack prepare pnpm@latest --activate
-
 # Copy package files for production install
-COPY package.json pnpm-workspace.yaml ./
+COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
+RUN npm install --global "$(node -p 'require("./package.json").packageManager')"
 COPY packages/backend/package.json ./packages/backend/
 COPY packages/frontend/package.json ./packages/frontend/
 
 # Install production dependencies only
-RUN pnpm install --prod --frozen-lockfile || pnpm install --prod
+RUN pnpm install --prod --frozen-lockfile
 
 # Copy built backend
 COPY --from=builder /app/packages/backend/dist ./packages/backend/dist
