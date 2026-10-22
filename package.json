@@ -1,6 +1,6 @@
 {
     "name": "spotify-reblend",
-    "version": "1.6.2",
+    "version": "1.6.3",
     "private": true,
     "description": "Spotify ReBlend - Create shared playlists with friends",
     "scripts": {
