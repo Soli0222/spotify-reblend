@@ -13,5 +13,5 @@
         "start": "pnpm --filter spotify-reblend-backend start",
         "test": "pnpm -r test"
     },
-    "packageManager": "pnpm@12.14.0"
+    "packageManager": "pnpm@12.15.0"
 }
