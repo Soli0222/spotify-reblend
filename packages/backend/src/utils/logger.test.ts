@@ -1,5 +1,6 @@
 import { context, trace } from '@opentelemetry/api';
-import { NodeSDK, tracing } from '@opentelemetry/sdk-node';
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import * as tracing from '@opentelemetry/sdk-trace';
 import express from 'express';
 import { once } from 'events';
 import http from 'http';
