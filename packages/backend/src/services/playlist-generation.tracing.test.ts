@@ -1,4 +1,5 @@
-import { NodeSDK, tracing } from '@opentelemetry/sdk-node';
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import * as tracing from '@opentelemetry/sdk-trace';
 import axios from 'axios';
 import express, { NextFunction, Request, Response } from 'express';
 import { AddressInfo } from 'node:net';
@@ -78,7 +79,7 @@ beforeAll(() => {
     vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318');
     telemetry = new NodeSDK({
         instrumentations: [],
-        spanProcessors: [new tracing.SimpleSpanProcessor(exporter)],
+        spanProcessors: [new tracing.SimpleSpanProcessor({ exporter })],
     });
     telemetry.start();
 });

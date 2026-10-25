@@ -1,4 +1,5 @@
-import { NodeSDK, tracing } from '@opentelemetry/sdk-node';
+import { NodeSDK } from '@opentelemetry/sdk-node';
+import * as tracing from '@opentelemetry/sdk-trace';
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const mocks = vi.hoisted(() => ({
@@ -83,7 +84,7 @@ describe('automatic update scheduler', () => {
         vi.stubEnv('OTEL_EXPORTER_OTLP_ENDPOINT', 'http://localhost:4318');
         telemetry = new NodeSDK({
             instrumentations: [],
-            spanProcessors: [new tracing.SimpleSpanProcessor(exporter)],
+            spanProcessors: [new tracing.SimpleSpanProcessor({ exporter })],
         });
         telemetry.start();
     });
