@@ -8,6 +8,7 @@
     "build": "tsc",
     "start": "node --require ./dist/telemetry.js dist/index.js",
     "test": "vitest run",
+    "test:e2e": "node --test scripts/application.e2e.test.cjs",
     "test:watch": "vitest"
   },
   "dependencies": {
