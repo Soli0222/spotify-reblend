@@ -9,6 +9,20 @@ on:
 jobs:
   test:
     runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:18.6-alpine3.23
+        env:
+          POSTGRES_USER: reblend_test
+          POSTGRES_PASSWORD: reblend_test
+          POSTGRES_DB: reblend_test
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U reblend_test -d reblend_test"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
     steps:
       - name: Checkout
         uses: actions/checkout@v7.0.1
@@ -32,3 +46,8 @@ jobs:
 
       - name: Type check and build
         run: pnpm build
+
+      - name: Run application API E2E tests
+        run: pnpm --filter spotify-reblend-backend test:e2e
+        env:
+          E2E_DATABASE_URL: postgresql://reblend_test:reblend_test@127.0.0.1:5432/reblend_test
