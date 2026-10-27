@@ -1,5 +1,14 @@
 # Changelog
 
+## [1.6.5](https://github.com/Soli0222/spotify-reblend/compare/v1.6.4...v1.6.5) (2026-10-27)
+
+
+### バグ修正・依存関係の更新
+
+* **ci:** cover production startup and telemetry in API E2E tests ([#281](https://github.com/Soli0222/spotify-reblend/issues/281)) ([1e21988](https://github.com/Soli0222/spotify-reblend/commit/1e219889e981747d38f3f3facc2e9dfe3df1d5af))
+* **deps:** update node dotenv to ^18.0.9 ([#279](https://github.com/Soli0222/spotify-reblend/issues/279)) ([1315ef2](https://github.com/Soli0222/spotify-reblend/commit/1315ef206684c81890a940ed2817517090edd1df))
+* **deps:** update opentelemetry-js monorepo ([#272](https://github.com/Soli0222/spotify-reblend/issues/272)) ([f4b005b](https://github.com/Soli0222/spotify-reblend/commit/f4b005bb81dcb437a067b93022de8e6679933275))
+
 ## [1.6.4](https://github.com/Soli0222/spotify-reblend/compare/v1.6.3...v1.6.4) (2026-10-24)
 
 
