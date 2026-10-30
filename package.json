@@ -14,5 +14,5 @@
         "test": "pnpm -r test",
         "test:e2e": "pnpm build && pnpm --filter spotify-reblend-backend test:e2e"
     },
-    "packageManager": "pnpm@12.16.0"
+    "packageManager": "pnpm@12.16.1"
 }
