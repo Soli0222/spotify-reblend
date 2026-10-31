@@ -5,4 +5,4 @@ type: application
 sources:
   - https://github.com/Soli0222/spotify-reblend
 version: 0.6.7
-appVersion: 1.6.5
+appVersion: 1.6.6
