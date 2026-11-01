@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.6](https://github.com/Soli0222/spotify-reblend/compare/v1.6.5...v1.6.6) (2026-10-31)
+
+
+### バグ修正・依存関係の更新
+
+* **deps:** update node axios to ^1.21.0 ([#286](https://github.com/Soli0222/spotify-reblend/issues/286)) ([bbe2aa8](https://github.com/Soli0222/spotify-reblend/commit/bbe2aa820265db152701e7e8434a31a4f7fdafd3))
+* **deps:** update node pnpm to v12.16.0 ([#285](https://github.com/Soli0222/spotify-reblend/issues/285)) ([dd3dcaf](https://github.com/Soli0222/spotify-reblend/commit/dd3dcaf0ef08a273c6c9fc96243a59420e6f97dd))
+* **deps:** update node pnpm to v12.16.1 ([#288](https://github.com/Soli0222/spotify-reblend/issues/288)) ([7821adb](https://github.com/Soli0222/spotify-reblend/commit/7821adb6aa3d4d9680ee0e1e1b105df7d1cd010b))
+* **deps:** update node react-router-dom to ^7.18.5 ([#289](https://github.com/Soli0222/spotify-reblend/issues/289)) ([b115c86](https://github.com/Soli0222/spotify-reblend/commit/b115c86a17f7e256130205eed80e7e3f44655ea3))
+* **deps:** update node.js to v26.13.0 ([#282](https://github.com/Soli0222/spotify-reblend/issues/282)) ([67e3e8b](https://github.com/Soli0222/spotify-reblend/commit/67e3e8b3a1a0d2fb2977a4c9b60c2e555430df02))
+* **deps:** update node.js to v26.13.0 ([#283](https://github.com/Soli0222/spotify-reblend/issues/283)) ([da79cfd](https://github.com/Soli0222/spotify-reblend/commit/da79cfd3bfe2773b4cf0bc9747b6cefce2c05611))
+
 ## [1.6.5](https://github.com/Soli0222/spotify-reblend/compare/v1.6.4...v1.6.5) (2026-10-27)
 
 
