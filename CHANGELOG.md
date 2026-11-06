@@ -1,5 +1,16 @@
 # Changelog
 
+## [1.6.7](https://github.com/Soli0222/spotify-reblend/compare/v1.6.6...v1.6.7) (2026-11-06)
+
+
+### バグ修正・依存関係の更新
+
+* **deps:** update node @opentelemetry/semantic-conventions to v1.44.0 ([#291](https://github.com/Soli0222/spotify-reblend/issues/291)) ([19e29b4](https://github.com/Soli0222/spotify-reblend/commit/19e29b4ad7d8e9d1876e9036731fe41df34077c6))
+* **deps:** update node @types/node to ^26.6.6 ([#290](https://github.com/Soli0222/spotify-reblend/issues/290)) ([38e3a03](https://github.com/Soli0222/spotify-reblend/commit/38e3a03391856dd8041fe08991e46640a0ff41e4))
+* **deps:** update node @vitejs/plugin-react to ^6.2.1 ([#295](https://github.com/Soli0222/spotify-reblend/issues/295)) ([30ad57a](https://github.com/Soli0222/spotify-reblend/commit/30ad57a6c0fd69f3b16c403a3e27574806a7e8dc))
+* **deps:** update node pnpm to v12.17.0 ([#297](https://github.com/Soli0222/spotify-reblend/issues/297)) ([6a97e97](https://github.com/Soli0222/spotify-reblend/commit/6a97e97dd396eda061e969959569ac34f4470393))
+* **deps:** update node vitest to ^5.1.0 ([#296](https://github.com/Soli0222/spotify-reblend/issues/296)) ([8033305](https://github.com/Soli0222/spotify-reblend/commit/80333055f6deb17c70b723ab6a6ffa5819c22642))
+
 ## [1.6.6](https://github.com/Soli0222/spotify-reblend/compare/v1.6.5...v1.6.6) (2026-10-31)
 
 
