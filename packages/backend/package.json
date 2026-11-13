@@ -14,9 +14,9 @@
   "dependencies": {
     "@opentelemetry/api": "1.10.0",
     "@opentelemetry/auto-instrumentations-node": "0.83.0",
-    "@opentelemetry/exporter-trace-otlp-http": "0.301.0",
-    "@opentelemetry/resources": "3.1.0",
-    "@opentelemetry/sdk-node": "0.301.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.301.1",
+    "@opentelemetry/resources": "3.1.1",
+    "@opentelemetry/sdk-node": "0.301.1",
     "@opentelemetry/semantic-conventions": "1.45.0",
     "axios": "^1.21.1",
     "cors": "^2.8.6",
@@ -30,7 +30,7 @@
     "short-unique-id": "^5.3.2"
   },
   "devDependencies": {
-    "@opentelemetry/sdk-trace": "3.1.0",
+    "@opentelemetry/sdk-trace": "3.1.1",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
     "@types/node": "^26.6.6",
