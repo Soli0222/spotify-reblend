@@ -1,5 +1,17 @@
 # Changelog
 
+## [1.6.9](https://github.com/Soli0222/spotify-reblend/compare/v1.6.8...v1.6.9) (2026-11-21)
+
+
+### バグ修正・依存関係の更新
+
+* **deps:** update node @opentelemetry/auto-instrumentations-node to v0.83.1 ([#318](https://github.com/Soli0222/spotify-reblend/issues/318)) ([4f8ed27](https://github.com/Soli0222/spotify-reblend/commit/4f8ed274647da68657b4a67714f3e93c59eee517))
+* **deps:** update node jsdom to ^31.0.1 ([#321](https://github.com/Soli0222/spotify-reblend/issues/321)) ([ed7d086](https://github.com/Soli0222/spotify-reblend/commit/ed7d086fa1e3210cd2ff5bef6aa40c8dbc79e9d6))
+* **deps:** update node pnpm to v12.20.0 ([#316](https://github.com/Soli0222/spotify-reblend/issues/316)) ([180fe27](https://github.com/Soli0222/spotify-reblend/commit/180fe27110a101683a7f23989af4e140912cf685))
+* **deps:** update node pnpm to v12.21.0 ([#322](https://github.com/Soli0222/spotify-reblend/issues/322)) ([6d3f4db](https://github.com/Soli0222/spotify-reblend/commit/6d3f4db1a0f052731b7ba797d254b5a170fe6e68))
+* **deps:** update node vitest to ^5.1.1 ([#325](https://github.com/Soli0222/spotify-reblend/issues/325)) ([5a6dc6f](https://github.com/Soli0222/spotify-reblend/commit/5a6dc6f3f86c6ec9c28aece590436cd5d4d9a7cc))
+* **deps:** update opentelemetry-js monorepo to v0.301.2 ([#319](https://github.com/Soli0222/spotify-reblend/issues/319)) ([74e0db2](https://github.com/Soli0222/spotify-reblend/commit/74e0db2c5cdf76b70522e5be24fda4006008ee73))
+
 ## [1.6.8](https://github.com/Soli0222/spotify-reblend/compare/v1.6.7...v1.6.8) (2026-11-14)
 
 
