@@ -1,5 +1,23 @@
 # Changelog
 
+## [1.7.0](https://github.com/Soli0222/spotify-reblend/compare/v1.6.9...v1.7.0) (2026-11-28)
+
+
+### 新機能
+
+* set app icon ([#333](https://github.com/Soli0222/spotify-reblend/issues/333)) ([95aed7c](https://github.com/Soli0222/spotify-reblend/commit/95aed7c1a5ce73f2eb7c7122bd64394d6847b0d2))
+
+
+### バグ修正・依存関係の更新
+
+* **chart:** update chart image postgres to v19 ([#324](https://github.com/Soli0222/spotify-reblend/issues/324)) ([2bca30e](https://github.com/Soli0222/spotify-reblend/commit/2bca30e78331a334d22efae053022ede8452cf36))
+* **deps:** update node @testing-library/jest-dom to v8 ([#331](https://github.com/Soli0222/spotify-reblend/issues/331)) ([dbf38af](https://github.com/Soli0222/spotify-reblend/commit/dbf38af2ed49f1e8c10851a31a574a38977be474))
+* **deps:** update node @types/node to ^26.6.7 ([#340](https://github.com/Soli0222/spotify-reblend/issues/340)) ([0a4205a](https://github.com/Soli0222/spotify-reblend/commit/0a4205a24fb13746f517f0c47af9bc54b051b6ae))
+* **deps:** update node pnpm to v12.22.0 ([#335](https://github.com/Soli0222/spotify-reblend/issues/335)) ([e937676](https://github.com/Soli0222/spotify-reblend/commit/e9376769c167024fbff092d80f97e15a489e8f25))
+* **deps:** update node pnpm to v12.23.0 ([#337](https://github.com/Soli0222/spotify-reblend/issues/337)) ([260f1fa](https://github.com/Soli0222/spotify-reblend/commit/260f1faf39607104f9a8c0bea4135551809544f4))
+* **deps:** update node react-router-dom to ^7.18.6 ([#326](https://github.com/Soli0222/spotify-reblend/issues/326)) ([7535db5](https://github.com/Soli0222/spotify-reblend/commit/7535db55b0d1bb3a86fffe62bae8279cba6fff46))
+* **deps:** update node react-router-dom to ^7.18.7 ([#342](https://github.com/Soli0222/spotify-reblend/issues/342)) ([2e76289](https://github.com/Soli0222/spotify-reblend/commit/2e7628967a06f28d6f81f9bc92ba4b6e13c03a1a))
+
 ## [1.6.9](https://github.com/Soli0222/spotify-reblend/compare/v1.6.8...v1.6.9) (2026-11-21)
 
 
